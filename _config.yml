@@ -4,8 +4,5 @@ baseurl: "/blog"
 url: "https://czhou578.github.io"
 theme: minima
 
-author:
-  name: Colin Zhou
-
 github_username: czhou578
 twitter_username: ColinZhouUSA
