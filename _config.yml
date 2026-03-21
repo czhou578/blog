@@ -1,0 +1,5 @@
+title: Your Blog Title
+description: Your description here
+baseurl: "/blog"
+url: "https://czhou578.github.io"
+theme: minima
