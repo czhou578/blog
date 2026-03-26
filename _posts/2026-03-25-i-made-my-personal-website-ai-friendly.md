@@ -136,6 +136,7 @@ It does seem like a lot of unnecessary work at the moment and a lot of extra fil
 If any of you have more ideas on how to build websites and optimize sites for an agentic future, feel free to reach out to me! I would love to hear about how things can be improved or optimized.
 
 The repository link for my personal website can be found here: [repo](https://github.com/czhou578/v3)
+My personal website link is [here](https://czhou578.github.io/v3). Notice the AI Agent section at the very bottom of the site!
 
 Thanks!
 
