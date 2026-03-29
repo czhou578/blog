@@ -70,7 +70,7 @@ A while loop went on infinitely until the processes were stopped. Inside of the 
 
 For my single agent experiment with the ResNeXt model, I did experiments with my Gemini 3.1 Pro agent and got the following chart:
 
-![alt text](../images/image.png)
+![alt text]({{ site.baseurl }}/images/image.png)
 
 Here is a snapshot of the tsv file:
 
@@ -139,7 +139,7 @@ I entered the prompt in README.md into Antigravity's AI chat and waited. Quite i
 
 Here were my results from the experiment:
 
-![alt text](../images/image-1.png)
+![alt text]({{ site.baseurl }}/images/image-1.png)
 
 And the `swarm_brain.json` file:
 
