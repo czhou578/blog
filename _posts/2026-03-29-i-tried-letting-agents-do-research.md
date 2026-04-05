@@ -36,7 +36,7 @@ I paid for a single RTX 4090 GPU on Runpod for around $0.59/hr in order to run a
 
 I entered the prompt in README.md into Antigravity's AI chat (no CLI here!), and was able to kick off a training run. Gemini 3.1. Pro (High) was able to read the markdown files, install the dependencies, and do about 20 trials until it stopped and manually prompted me if more trials were needed. I asked the agent to log all the validation losses in the run.log file and report all trials to the tsv file, making sure to list not only the validation loss but also the description of changes. 
 
-The agent immmediately started and to run the workers in parallel, it generated a custom bash script and python script that would use the subprocess module to run multiple agents. Here is how this was initialized:
+The agent immediately started and to run the workers in parallel, it generated a custom bash script and python script that would use the subprocess module to run multiple agents. Here is how this was initialized:
 
 ```python
 
