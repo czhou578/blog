@@ -51,16 +51,33 @@ so often until the training is done.
 ## Inference
 
 I then ran the `inference.py` which is a script that would create a .wav file in the outputs folder based on the command line or text file arguments with the speech that
-is going to be read. You can select the wav file that would serve as the reference audio clip, and then update the corresponding reference text with the text from that clip.
+is going to be read. You can select the wav file that would serve as the reference audio clip, and then update the corresponding reference text with the text from that clip. 
+
+At the end, I uploaded several of the checkpoints that I used to HuggingFace, since Git charges quite an exorbitant amount of money to store files in its large file storage system. This proved useful later, as I decided to use one of my saved checkpoints (which had the lowest loss) to generate all of the final .wav files.
+
+## Running Trials and Experiments
+
+I asked Claude to give me a simple but realistic plan for me to improve on my trial results. It proposed a set of experiments relating to batch size, number of epochs, and the learning rate. I ran all of the experiments except for one, which was increasing the batch size to 8000 frames (afraid that my 20GB of VRAM wouldn't be enough, and it wasn't worth switching setups). 
 
 ## Problems Encountered
 
+There were numerous challenges that I had to overcome to get the final result. Here is a list:
+
+1. Python Environments: Ah, yes, this should be self explanatory. Every time that I got a new VM on Runpod and had to install my environment, it would take at least 15-20 minutes for all of the dependencies to install. This was a huge time sink, and I'm not sure how to exactly improve on this or speed it up.
+2. Checkpoints: Each checkpoint file generated was about 5GB, which quickly ate up all of my VM storage. Thankfully, Huggingface made this easier because of their generous
+limits on storage. But I also had several trial runs invalidated since they used previous checkpoints from previous runs, thus not doing anything. I ended up having to remove all the checkpoints later on to allow trials to truly train.
+3. When I originally made my .txt file copy of Taylor Swift's song Blank Space, the model voice speed read the entire file without much pausing, and also inserted random
+words like "government" into the recording. I found out through some AI-assisted debugging that the speed reading was due to the way the segmentation was working on the inference side.
+
+The lyrics that I copy and pasted from online didn't have ending punctuation, so the segmentation was treating the entire half of the song as one line. Obviously, I wanted it to be one line, one synthesis. That required changing the behavior of the script to account for this. In addition, the insertion of the word "government" was due to the referenced text variable in my inference script not completely matching the real audio transcription of the referenced audio clip. 
+
 ## Takeaways
+
+Also, I did test the speech on a very clear audio clip of JFK, without any microphone noises, or missed audio. For some reason, it didn't sound quite like him to me. But keep in mind that the microphone quality back in the 1960's weren't the best, but those recordings are all that we have. So when the audio quality improved a lot, it would
+sound very different to the ear. 
 
 ## Conclusion
 
-# STEP 4: Run the official dataset preparation script
-# This converts metadata.csv + wavs into raw.arrow + duration.json
-# which F5-TTS needs internally for efficient training
-
+I had a lot of fun with this project, and was able to have a JFK-like voice read content that was both funny and humorous. I am impressed with how open source TTS software
+can accomplish in contrast with the more premiumm and private third party offerings. I have included all of my source code (here)[https://github.com/czhou578/jfk-voice-clone/tree/master]. 
 
