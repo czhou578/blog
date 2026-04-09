@@ -67,16 +67,47 @@ Then, I officially launched the finetuning, which would perform the specified ep
 ## Inference
 
 I then ran the `inference.py` which is a script that would create a .wav file in the outputs folder based on the command line or text file arguments with the speech that
-is going to be read. You can select the wav file that would serve as the reference audio clip, and then update the corresponding reference text with the text from that clip.
+is going to be read. You can select the wav file that would serve as the reference audio clip, and then update the corresponding reference text with the text from that clip. 
+
+The inference script contains multiple options as command line options, such as the reference audio clip, the reference text, the output file name etc, and the checkpoint directory. It will use the specified checkpoint passed in as the model to use for inference. 
 
 ## Problems Encountered
 
+There were several issues that I ran into during this project. 
+
+1. I initially ran into storage issues in RunPod due to the number of wav files and the checkpoints from the model training. If you want to replicate my code on RunPod, I would suggest having at least 40GB of storage.
+
+2. It is important to know how to save your checkpoints. I used HuggingFace's Git LFS to store my checkpoints, but it is very easy to get mixed up with using Git LFS in conjunction with Git submodules. There were many times when I forgot to run `git lfs pull` before running the training script, or forgot to sync using git submodules the files that I needed, like the csv file, or the wav files.
+
+3. During model finetuning, I had issues where old checkpoints of a previous run were being reused. For example, if I had a trial run that did 30 epochs, then a 50 epoch run would run strangely fast since it was not actually training from scratch. To fix this, I had to modify my training script such that each experiment would get its own checkpoint directory. 
+
+4. When doing inference, I realized that there were the word "government" interspersed in the final audio recording. In addition, when I first asked it to read Taylor Swift's Blank Space lyrics, the AI voice speed ran through the lyrics, without respecting the line breaks or pauses. To fix the first issue, it turns out that F5 by default requires that the reference text be exactly the same as the reference audio. 
+
+In order to fix the second issue, I had to modify the inference script to add pauses between lines. I added a pause parameter that can be adjusted (I used 0.7 seconds) to insert pauses between lines. In addition, I also added a mode parameter that would take two values: "lines" or "sentences", with a default of "lines". In the original text file containing the lyrics, there were no punctuation between lines, so the inference script was just reading the text as one long string. Now, if the mode was set to "lines", then it would present every line break as the end of a line. Otherwise, if the mode was set to "sentences", then it would present every punctuation mark as the end of a line. 
+
+5. One unique thing about JFK's speeches is that the microphone quality from the 1960s were obviously much worse then they are today. In the beginning, the reference audio clip that I used was a very clear sounding clip, which to me made it seem very strange. So I actually switched it out for another clip that had more background noise and static, which to me sounded more authentic to the time period (LOL). 
+
 ## Takeaways
+
+My biggest takeaways from this project is that it is possible to recreate someone's voice from audio clips, all for free. It is quite amazing the ecosystem that has developed for such projects to be doable. The GPU resources needed were not very expensive at all which was surprising. 
+
+There are a few things that would be worth exploring in the future.
+
+1. How long of a testing clip in the beginning do you really need in order to get a good transcription? I used a clip that was 4 hrs, but would 2 hrs be enough?
+
+2. What is the perfect set of hyperparameters to use for best results? This will always be a work in progress.
+
+3. Are there other TTS libraries out there that would be better for this project? 
+
+4. Right now, I have to manually go through the list of wav files that were from the dataset to use as a reference. I wonder if there is a programmatic way of doing this, based on some formula or some baseline metric.
 
 ## Conclusion
 
-# STEP 4: Run the official dataset preparation script
-# This converts metadata.csv + wavs into raw.arrow + duration.json
-# which F5-TTS needs internally for efficient training
+This project was a dream come true for me that I had planned for over a year. I'm very happy with the final result and learned a lot about setting up and using an open source TTS library. 
 
+At the end, I was able to generate clips of JFK's voice reading Taylor Swift lyrics, the 2025 inauguration speech, and more. I highly recommend trying it out if you have the time and resources!
+
+Thanks for reading!
+
+CZ
 
