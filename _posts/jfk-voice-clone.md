@@ -26,7 +26,7 @@ experiments, the budget GPU actually performed very well in terms of inference t
 
 For storing big chunks of data, I initially chose Git LFS since it's just a natural extension of using Git. But having a HuggingFace repo to store the model checkpoints was a big convenience for me.
 
-## Data Cleaning
+## Data Downloading
 
 In order to get the voice of JFK to be as good as possible, I found a 4 hour clip of JFK's speeches from various events on YouTube (yes, that does exist), and I converted it to a large mp3
 file. This took a while since a lot of online YouTube to mp3 converters don't accept clips of that long. I ended up using the `yt-dlp` library from Python, which directly downloaded the audio from YouTube using the video url into 16 kHz mono WAV format. 
@@ -103,9 +103,15 @@ There are a few things that would be worth exploring in the future.
 
 ## Conclusion
 
-This project was a dream come true for me that I had planned for over a year. I'm very happy with the final result and learned a lot about setting up and using an open source TTS library. 
+This project was a dream come true for me that I had planned for over a year. I'm very happy with the final result and learned a lot about setting up and using an open source TTS library. It does bring up some interesting questions about the ethics of using AI in this way. If such technology is already this accessible and will only get better, can we trust it to not be misused? 
+
+A voice clone of the president ordering an invasion of another country could be easily misinterpreted as real, and could have dire consequences, like starting a war that kills millions. 
 
 At the end, I was able to generate clips of JFK's voice reading Taylor Swift lyrics, the 2025 inauguration speech, and more. I highly recommend trying it out if you have the time and resources!
+
+## Sources
+
+In my repository, I have the entire list of .wav files that I used, as well as the scripts for inference, data loading, and training. I also have a markdown file that lists all of the experiments I ran for finetuning, and what hyperparams that I used. 
 
 Thanks for reading!
 
