@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "jfk voice clone"
+title: "I Trained an AI to Speak Like JFK"
 date: 2026-04-07
 ---
 ![alt text]({{ site.baseurl }}/images/jfk.png)
@@ -118,15 +118,15 @@ For your listening enjoyment, here are the audio clips that I generated using th
 
 ### Taylor Swift's Blank Space
 
-<audio controls src="/audio/blank_space_official.wav"></audio>
+<audio controls src="{{ site.baseurl }}/audio/blank_space_official.wav"></audio>
 
 ### JFK's Dallas Trade Mart Speech (undelivered 11/22/63)
 
-<audio controls src="/audio/jfk_undelivered_speech_2.wav"></audio>
+<audio controls src="{{ site.baseurl }}/audio/jfk_undelivered_speech_2.wav"></audio>
 
 ### 2025 Presidential Inauguration Speech
 
-<audio controls src="/audio/covfefe_speech.wav"></audio>
+<audio controls src="{{ site.baseurl }}/audio/covfefe_speech.wav"></audio>
 
 Thanks for reading!
 
