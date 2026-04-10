@@ -3,6 +3,7 @@ layout: post
 title: "jfk voice clone"
 date: 2026-04-07
 ---
+![alt text]({{ site.baseurl }}/images/jfk.png)
 
 As someone who has always been fascinated by history and the events of the 20th century, I've always been keen to explore alternate scenarios, where a famous historical figure lived to see an event that didn't occur when they were alive. 
 
@@ -109,9 +110,23 @@ A voice clone of the president ordering an invasion of another country could be 
 
 At the end, I was able to generate clips of JFK's voice reading Taylor Swift lyrics, the 2025 inauguration speech, and more. I highly recommend trying it out if you have the time and resources!
 
-## Sources
+## Sources and Results
 
-In my repository, I have the entire list of .wav files that I used, as well as the scripts for inference, data loading, and training. I also have a markdown file that lists all of the experiments I ran for finetuning, and what hyperparams that I used. 
+In my repository, I have the entire list of .wav files that I used, as well as the scripts for inference, data loading, and training. I also have a markdown file that lists all of the experiments I ran for finetuning, and what hyperparams that I used.
+
+For your listening enjoyment, here are the audio clips that I generated using the finetuned model.
+
+### Taylor Swift's Blank Space
+
+<audio controls src="/audio/blank_space_official.wav"></audio>
+
+### JFK's Dallas Trade Mart Speech (undelivered 11/22/63)
+
+<audio controls src="/audio/jfk_undelivered_speech_2.wav"></audio>
+
+### 2025 Presidential Inauguration Speech
+
+<audio controls src="/audio/covfefe_speech.wav"></audio>
 
 Thanks for reading!
 
