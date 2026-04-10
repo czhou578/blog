@@ -114,6 +114,8 @@ At the end, I was able to generate clips of JFK's voice reading Taylor Swift lyr
 
 In my repository, I have the entire list of .wav files that I used, as well as the scripts for inference, data loading, and training. I also have a markdown file that lists all of the experiments I ran for finetuning, and what hyperparams that I used.
 
+[GitHub Repository](https://github.com/czhou578/jfk-voice-clone)
+
 For your listening enjoyment, here are the audio clips that I generated using the finetuned model.
 
 ### Taylor Swift's Blank Space
