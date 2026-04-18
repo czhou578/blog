@@ -4,7 +4,7 @@ title: "How I use AI Agents for coding in 2026"
 date: 2026-04-18
 ---
 
-![alt text]({{ site.baseurl }}/images/ai-ide.png)
+![alt text](https://czhou578.github.io/blog/images/ai-ide.png)
 
 Agentic workflows are slowly becoming the norm for software development. My current company generously provides all developers with a subscription to Google AI Ultra, which gives you access to the Antigravity IDE with no rate limits, and the maximum priority for requests. 
 
