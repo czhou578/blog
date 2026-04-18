@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "How I use Agents in 2026"
+title: "How I use AI Agents for coding in 2026"
 date: 2026-04-18
 ---
 
