@@ -20,7 +20,7 @@ Even better, if I am not confident of it doing a large code change, I can always
 
 ---
 
-Here are a few things that agents are good at doing, through my experience
+Here are a few things that agents are good at doing, through my experience:
 
 **1. Generating architecture deep-dives**
 
