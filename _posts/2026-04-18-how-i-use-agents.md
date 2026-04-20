@@ -68,29 +68,29 @@ But be aware that sometimes it will highlight changes that it deems extremely ur
 
 Now on the negative side:
 
-1. **Bad Frontend Habits**
+**1. Bad Frontend Habits**
 
 On the frontend, it is much easier for agents to keep adding states and ref's in React, which can easily accumulate and become hard to reason about. It seems to be the default behavior for agents to do this, and needs a lot of human supervision. 
 
 Cleanups have been relatively easy for me, but in the early stages, it's definitely a hit and miss. 
 
-2. **Changing Models in the Middle of a Conversation**
+**2. Changing Models in the Middle of a Conversation**
 
 Changing models in the middle of a conversation can lead to a loss of context, and reconciling different arguments can be difficult. If Claude suggested one change, but then Gemini reversed it, it is hard to tell which one is correct, and even more difficult to reverse. 
 
 Besides trivial errors, it really is a hope and prayer that Claude and Gemini are on the same page. It is important to prioritise diversity of thought, but sometimes a consensus between models is neede for productivity.
 
-3. **Unnecessary File Creation**
+**3. Unnecessary File Creation**
 
 In addition, agents have a habit of creating files that are not needed on occasions. You have to be very clear and explicit about which files to add. More often then not for testing purposes, it will just create a new script to test something, and then not delete it. 
 
 I've found that agents cannot actually deal with Jupyter Notebooks effectively for some reason. They will often make syntax errors when editing code cells, and sometimes just create a Python script to run the code instead. I don't know if I'm missing something here. 
 
-4. **Terminal Management**
+**4. Terminal Management**
 
 While I do appreciate agents spinning up a terminal and running commands to test their changes, it can be very annoying to have to keep track of the terminals that have spawned. I often times have existing terminals in play, and conflicts in this sense can be hard to manage. 
 
-5. **UI when creating plans**
+**5. UI when creating plans**
 
 This is definitely nitpicking at this point but when I ask Gemini to generate a plan for example, in Antigravity IDE, it creates a document that is not formatted correctly, and seems very wonky. In comparison, Claude's plan actually looks like a real Markdown preview that you can see on GitHub repos, and not some notepad-quality document. 
 
