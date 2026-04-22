@@ -33,9 +33,15 @@ I had to ask myself several questions:
 
 For the KV Cache, I initially thought that it would be some sort of a hashmap, where the keys are _ and the values are _. But after thinking about it, I realized that it really is just a regular tensor of shape None initially that will hold the key entries which are just (B, 1, hs), all concatenated along the -2 axis. That way, each row will contain the key entries for a specific token. 
 
+In actuality, you don't want to mix the key and value entries in one data structure, because the whole point of the cache is that you can directly multiply the keys with the values. Interleaving them would mean you have to specifically extract out the keys and values at every step, which defeats the purposes of caching. 
+
 Now, we have to carefully consider that in the original implementation of NanoGPT, we were masking the future tokens of a sequence at a timestamp with negative infinity, which prevented the model from calculating attention scores for tokens it hadn't seen yet. But that was when we were recalculating attention for every single token in a sequence at every forward pass. 
 
 Now that we are generating one token at a time and using a cache, it doesn't require this masking. So we can remove it!
+
+Next, we have to consider how we are calculating the weights or "wei". Before, we were taking the query matrix and doing dot product with the key matrix. Now, since we have a key cache, we can instead dot product with the key matrix, making sure to transpose it so that the shapes can work out. 
+
+The softmax and the dropout can stay the same, but we have to then dot product the value cache with the wei matrix to get the final result, which is the variable `out`. 
 
 Now, we run into trouble since we only want to calculate the KV cache values during inference. How do we prevent the caches from being populated at the wrong time? Thankfully, PyTorch implicitly has a `self.training` flag that every single submodule from `nn.Module` inherits which has a boolean value showing whether training is active or not. We can just have an if-else condition that guards the training code from the inference code like so: 
 
@@ -72,7 +78,7 @@ In this function, we are setting the model to evaluation mode, and making sure t
 
 Now, we run `model(idx)` once since that is how we prefill the KV cache before the next token is generated. Then, we have a for loop that iterates until the max number of new tokens we want, and grab the logits for the specific index, run softmax over the logits to get the probabilities, and then sample the next index. The index is added to the running sequence of indexes, which will then be decoded into the correct letters at the final step.
 
-But what is the 
+But what is the curr_pos doing? Before, we had a problem where the attention mechanism did not pay attention to the specific positions of the idx. In order to add positional encoding, we want to 
 
 Now, let's do a shapes check to verify things:
 
