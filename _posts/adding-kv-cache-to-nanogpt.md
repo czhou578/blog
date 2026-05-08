@@ -8,13 +8,15 @@ date: 2026-04-18
 
 I have been getting my feet wet in ML inference systems recently, and decided to try implementing KV caching in NanoGPT. 
 
-Just as brief context, NanoGPT is a repository by Andrej Karpathy that implements a GPT model from scratch. 
+Just as brief context, NanoGPT is a repository by Andrej Karpathy that implements a GPT model from scratch, stripping away all the abstractions and optimizations to deliver the most simplistic language model that models ChatGPT.
+
+For context, I highly recommend watching his Makemore series on YouTube and also how to build a GPT from scratch. The following will make more sense if you have a basic understanding of transformers and attention mechanisms.
 
 **1. The Problem**
 
 In a standard GPT model, the attention mechanism calculates the attention scores for all tokens in the input sequence. This is done by calculating the dot product of the query and key matrices, and then applying a softmax function to get the attention scores. 
 
-The problem is that for long sequences, this becomes very computationally expensive. It would be wrong to calculate the key and value matrices for all the tokens every time we want to generate a new token, since we have already calculated them for the previous tokens. This is quadratic time complexity for a sequence generation. This is where the idea of a cache comes in.
+The problem is that for long sequences, this becomes very computationally expensive. It would be wrong to calculate the key and value matrices for all the tokens every time we want to generate a new token, since we have already calculated them for the previous tokens. This is quadratic time complexity for a sequence generation and is where the idea of a cache comes in. 
 
 **2. The Solution**
 
@@ -22,7 +24,9 @@ The solution is to cache the key and value matrices for each token in the input 
 
 **3. Implementation in NanoGPT**
 
-In NanoGPT, we have to first identify the place where the KV Cache will live. In this case, it is at the most basic unit of the implementation, which is the `Head` class. We have defined the `Head` as the class that handles one head of self attention.
+In NanoGPT, we have to first identify the place where the KV Cache will live. In this case, it is at the most basic unit of the implementation, which is the `Head` class. We have defined the `Head` as the class that handles one head of self attention. 
+
+As a recap, each head of self attention is responsible for calculating the attention scores for a specific token in the input sequence. 
 
 I had to ask myself several questions:
 
@@ -31,7 +35,7 @@ I had to ask myself several questions:
 3. Does masking even make sense anymore?
 4. How should the forward method deal with inference vs training?
 
-For the KV Cache, I initially thought that it would be some sort of a hashmap, where the keys are _ and the values are _. But after thinking about it, I realized that it really is just a regular tensor of shape None initially that will hold the key entries which are just (B, 1, hs), all concatenated along the -2 axis. That way, each row will contain the key entries for a specific token. 
+For the KV Cache, I initially thought that it would be some sort of a hashmap, where the keys are the token id's and the values are the key and value matrices for that token. But after thinking about it, I realized that it really is just a regular tensor of shape None initially that will hold the key entries which are just (B, 1, hs), all concatenated along the -2 axis. That way, each row will contain the key entries for a specific token. 
 
 In actuality, you don't want to mix the key and value entries in one data structure, because the whole point of the cache is that you can directly multiply the keys with the values. Interleaving them would mean you have to specifically extract out the keys and values at every step, which defeats the purposes of caching. 
 
@@ -47,7 +51,80 @@ Now, we run into trouble since we only want to calculate the KV cache values dur
 
 Lastly, I had to add an if else condition to the concatenation logic, since if this is the very first time we are running forward, then the key and value caches would be None, so we need to set it to the first key / value tensors that were generated. 
 
-Now, let's write a generation function that runs during evaluation time and actually gives back the tokens that we want to see in the result!
+THe final code looks like this:
+
+```python
+
+class Head(nn.Module):
+    """ one head of self-attention """
+
+    def __init__(self, head_size):
+        super().__init__()
+        self.key = nn.Linear(n_embd, head_size, bias=False)
+        self.query = nn.Linear(n_embd, head_size, bias=False)
+        self.value = nn.Linear(n_embd, head_size, bias=False)
+        self.register_buffer('tril', torch.tril(torch.ones(block_size, block_size)))
+        self.key_cache = None
+        self.value_cache = None
+        self.dropout = nn.Dropout(dropout)
+
+    # KV Cache lives here.
+    def forward(self, x):
+        # input of size (batch, time-step, channels)
+        # output of size (batch, time-step, head size)
+        B,T,C = x.shape
+        k = self.key(x)   # (B,1,hs)
+        q = self.query(x) # (B,1,hs)
+        v = self.value(x)
+
+        # use the accumulated kv_cache here
+
+        """
+            (b, 1, hs)
+            interleaving k and v in one tensor is wrong
+                - you would have extract them back out every step, which defeats purpose of easy access.
+            
+            you need to priotize density and memory access patterns (locality and caches)
+
+            Q should be attending over the full cache, all past tokens plus the current one.
+
+            cache should be None
+
+            set k to self.key_cache if initially none
+
+            self.training = False is set on every submodule when you call model.eval().
+
+        """
+
+        if not self.training:
+            if self.key_cache is not None:
+                self.key_cache = torch.cat([self.key_cache, k], dim=-2) # (B, num_tokens_seen, hs)
+                self.value_cache = torch.cat([self.value_cache, v], dim=-2) # (B, num_tokens_seen, hs)
+            else:
+                self.key_cache = k
+                self.value_cache = v
+
+            wei = q @ torch.transpose(self.key_cache, 1, 2) * self.key_cache.shape[-1]**-0.5
+
+            wei = F.softmax(wei, dim=-1) # (B, T, T)
+            wei = self.dropout(wei)
+            # perform the weighted aggregation of the values
+            out = wei @ self.value_cache # (B, 1, T) @ (B, T, hs) -> (B, 1, hs)
+            return out
+        else:
+            # compute attention scores ("affinities")
+            wei = q @ k.transpose(-2,-1) * k.shape[-1]**-0.5 # (B, T, hs) @ (B, hs, T) -> (B, T, T)
+            wei = wei.masked_fill(self.tril[:T, :T] == 0, float('-inf')) # (B, T, T)
+            wei = F.softmax(wei, dim=-1) # (B, T, T)
+            wei = self.dropout(wei)
+            # perform the weighted aggregation of the 
+            
+            out = wei @ v # (B, T, T) @ (B, T, hs) -> (B, T, hs)
+            return out  
+
+```
+
+Now, let's write a generation function that runs during evaluation time and actually gives back the tokens that we want to see in the result! This is again somewhat similar to the real generation function from the original NanoGPT repository, but taking into account the KV Cache implementation.
 
 Here is what it looks like: 
 ```python
@@ -59,7 +136,7 @@ def generate_kv_cache(model, idx, max_num_tokens):
 
     with torch.no_grad():
         for step in range(max_num_tokens):
-            curr_pos = step + idx.shape(1) 
+            curr_pos = idx.shape[1]
 
             logits, _ = model(idx[:, -1:], pos=torch.tensor[curr_pos], device=device) # (B, 1, C)
             logits = logits[:, -1, :]
@@ -73,15 +150,142 @@ def generate_kv_cache(model, idx, max_num_tokens):
     
     return idx
 
+model = GPTLanguageModel()
+m = model.to(device)
+# print the number of parameters in the model
+print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
+
+# create a PyTorch optimizer
+optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
+
+for iter in range(max_iters):
+
+    # every once in a while evaluate the loss on train and val sets
+    if iter % eval_interval == 0 or iter == max_iters - 1:
+        losses = estimate_loss()
+        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
+
+    # sample a batch of data
+    xb, yb = get_batch('train')
+
+    # evaluate the loss
+    logits, loss = model(xb, yb)
+    optimizer.zero_grad(set_to_none=True)
+    loss.backward()
+    optimizer.step()
+
+# generate from the model
+context = torch.zeros((1, 1), dtype=torch.long, device=device)
+print(decode(generate_kv_cache(m, context, max_num_tokens=500)[0].tolist()))
+
+
 ```
 In this function, we are setting the model to evaluation mode, and making sure to clear the kv cache for the model. 
 
 Now, we run `model(idx)` once since that is how we prefill the KV cache before the next token is generated. Then, we have a for loop that iterates until the max number of new tokens we want, and grab the logits for the specific index, run softmax over the logits to get the probabilities, and then sample the next index. The index is added to the running sequence of indexes, which will then be decoded into the correct letters at the final step.
 
-But what is the curr_pos doing? Before, we had a problem where the attention mechanism did not pay attention to the specific positions of the idx. In order to add positional encoding, we want to 
+## Positional Encoding
+
+A transformer processes all tokens at the same time. The problem is that this means the model has no sense of position. The sentence "A cat is big" and "A big is cat" would be treated as the same sentence, which is wrong. We need someway to encode the positional information of each token and feed that into the model so it knows this.
+
+The model will use the position embedding table to learn the positions of the tokens. 
+
+During a normal forward pass, if we were to have a sequence of length 17, then we can just easily look up the first 17 positions of the position embedding table and add it to the token embeddings. 
+
+But since we now have the KV Cache, we aren't feeding the entire sequence into the model, but rather feeding one token at a time into the forward pass. If we didn't pass `pos` into the model, then the model would treat every token as the first token, which is wrong. 
+
+I am assigning `curr_pos` to be `idx.shape[1]` (which is the number of tokens we have seen so far). 
+
+Here is a walkthrough:
+
+Let's say that my prompt is the string "O Romeo, " which encodes to 9 tokens: [15, 23, 6, 18, 14, 5, 12, 0, 3]
+
+idx = [[15, 23, 6, 18, 14, 5, 12, 0, 3]]   # shape (1, 9)
+         ↑   ↑   ↑   ↑   ↑   ↑   ↑  ↑  ↑
+        pos0 pos1 ... ... ... ... ... ... pos8
+
+Step 0: The width of the first row is 9. The model generates 42. We append it. 
+
+idx = [[15, 23, 6, 18, 14, 5, 12, 0, 3, 42]]   # shape (1, 10)
+
+Step 1: The width of the first row is 10. The model generates 10. We append it. 
+
+idx = [[15, 23, 6, 18, 14, 5, 12, 0, 3, 42, 10]]   # shape (1, 11)
+
+Step 2: The width of the first row is 11. The model generates 19. We append it. 
+
+idx = [[15, 23, 6, 18, 14, 5, 12, 0, 3, 42, 10, 19]]   # shape (1, 12)
+
+In conclusion, using idx.shape[1] allows us to immediatley know how long the total sequence is. This tells us where the next position the next token should be. 
+
+## Result
+
+After running the result, we now get 
+
+```text
+And they brid write, is not the die;
+Though we art One my day hangs:
+Wart he us hath bury, dills ane away, my feanst,
+Anzing heavens, tofultien me milen's
+Whines is eye, hain latise, drovets, and Will.
+
+Downerabs!
+Alhin the courtius, onceivy:
+Supplain's twoy. Hence's norfole,
+Against my lows thee again Willo when evicks eye myself?
+ETo husing stroops: the resheper my brupt for treign the flows.
+Tale oftenceful in thy offery your
+Hasting is a aday Was happesty:
+if courty.
+
+ANGCIO:
+Say, from care,
+
+```
 
 Now, let's do a shapes check to verify things:
 
+GPTLanguageModel.forward(idx, pos=None)
+  idx:     (1, 9)       # (B, T)
+
+  tok_emb: (1, 9, 64)   # token_embedding_table lookup
+  pos_emb: (9, 64)      # position_embedding_table(arange(9))
+  x:       (1, 9, 64)   # tok_emb + pos_emb — broadcast adds fine
+
+  ↓ Into Head.forward(x):
+    x: (1, 9, 64)
+    k = self.key(x):     (1, 9, 16)   # Linear(64 → 16)
+    q = self.query(x):   (1, 9, 16)
+    v = self.value(x):   (1, 9, 16)
+
+    # key_cache is None → set it directly
+    self.key_cache:    (1, 9, 16)
+    self.value_cache:  (1, 9, 16)
+
+    wei = q @ key_cache.T:  (1,9,16) @ (1,16,9) → (1, 9, 9)
+    wei (after softmax):    (1, 9, 9)
+    out = wei @ value_cache: (1,9,9) @ (1,9,16) → (1, 9, 16)
 
 
+Phase 2: Decode Step 0:
+
+GPTLanguageModel.forward(idx[:, -1:], pos=9)
+  idx:     (1, 1)       # only the last token
+  tok_emb: (1, 1, 64)
+  pos_emb: (1, 64)      # position_embedding_table(tensor([9]))
+  x:       (1, 1, 64)
+
+  ↓ Into Head.forward(x):
+    x: (1, 1, 64)
+    k = self.key(x):   (1, 1, 16)
+    q = self.query(x): (1, 1, 16)
+    v = self.value(x): (1, 1, 16)
+
+    # key_cache exists — concatenate!
+    self.key_cache:   cat[(1,9,16), (1,1,16)] → (1, 10, 16)
+    self.value_cache: cat[(1,9,16), (1,1,16)] → (1, 10, 16)
+
+    wei = q @ key_cache.T:   (1,1,16) @ (1,16,10) → (1, 1, 10)
+    wei (after softmax):     (1, 1, 10)
+    out = wei @ value_cache: (1,1,10) @ (1,10,16) → (1, 1, 16)
 
