@@ -289,3 +289,161 @@ GPTLanguageModel.forward(idx[:, -1:], pos=9)
     wei (after softmax):     (1, 1, 10)
     out = wei @ value_cache: (1,1,10) @ (1,10,16) → (1, 1, 16)
 
+The best way to definitely check this is to do an output equivalence test. In other words, if the KV cache is mathematically correct, then it should produce the exact same tokens as the no-cache version given the same random seed and prompt. 
+
+I added this test cell to my notebook:
+
+```python
+torch.manual_seed(42)
+context = torch.zeros((1, 1), dtype=torch.long, device=device)
+
+# Run without cache
+out_no_cache = generate_no_cache(model, context.clone(), max_new_tokens=20)
+
+# Run with cache (same seed, same prompt)
+torch.manual_seed(42)
+out_with_cache = generate_with_cache(model, context.clone(), max_new_tokens=20)
+
+# Check token-by-token equality
+assert torch.equal(out_no_cache, out_with_cache), \
+    f"MISMATCH!\nNo cache:   {out_no_cache}\nWith cache: {out_with_cache}"
+
+print("✓ Cache output matches no-cache output exactly!")
+print(decode(out_with_cache[0].tolist()))
+```
+
+What this does is run the same prompt through both the no-cache and cache versions of the model, and checks if the output is the same. If it is, then we know that the KV cache is working as expected. 
+
+## Benchmarks
+
+Now, let's see how much faster the KV cache makes the model, since that is what matters right? 
+
+```python
+
+# ── non-cached generate (forces full-context recompute every step) ────────────
+def generate_no_cache(model, idx, max_new_tokens):
+    """Runs in train mode so the KV cache branch is never entered."""
+    model.train()                          # disables KV cache path
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            idx_cond = idx[:, -block_size:]
+            logits, _ = model(idx_cond)
+            logits = logits[:, -1, :]
+            probs  = torch.nn.functional.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat((idx, idx_next), dim=1)
+    return idx
+
+# ── cached generate (your existing path, one token fed at a time) ─────────────
+def generate_with_cache(model, idx, max_new_tokens):
+    model.eval()
+    clear_kv_cache(model)
+    with torch.no_grad():
+        for _ in range(max_new_tokens):
+            # Feed only the LAST token so the cache does the rest of the work
+            logits, _ = model(idx[:, -1:])   # (B, 1, vocab_size)
+            logits = logits[:, -1, :]
+            probs  = torch.nn.functional.softmax(logits, dim=-1)
+            idx_next = torch.multinomial(probs, num_samples=1)
+            idx = torch.cat((idx, idx_next), dim=1)
+    return idx
+
+# ── benchmark ─────────────────────────────────────────────────────────────────
+N_TOKENS   = 200
+N_RUNS     = 3       # average over multiple runs for stability
+context    = torch.zeros((1, 1), dtype=torch.long, device=device)
+
+# warm-up (avoids cold-start CUDA overhead skewing results)
+_ = generate_no_cache(model, context.clone(), 10)
+clear_kv_cache(model)
+_ = generate_with_cache(model, context.clone(), 10)
+
+# --- No KV cache ---
+times_no_cache = []
+for _ in range(N_RUNS):
+    t0 = time.perf_counter()
+    generate_no_cache(model, context.clone(), N_TOKENS)
+    if device == 'cuda':
+        torch.cuda.synchronize()
+    times_no_cache.append(time.perf_counter() - t0)
+
+# --- With KV cache ---
+times_cache = []
+for _ in range(N_RUNS):
+    t0 = time.perf_counter()
+    generate_with_cache(model, context.clone(), N_TOKENS)
+    if device == 'cuda':
+        torch.cuda.synchronize()
+    times_cache.append(time.perf_counter() - t0)
+
+avg_no_cache = sum(times_no_cache) / N_RUNS
+avg_cache    = sum(times_cache)    / N_RUNS
+
+print(f"Tokens generated : {N_TOKENS}")
+print(f"No KV cache      : {avg_no_cache:.3f}s  ({N_TOKENS/avg_no_cache:.1f} tok/s)")
+print(f"With KV cache    : {avg_cache:.3f}s  ({N_TOKENS/avg_cache:.1f} tok/s)")
+print(f"Speedup          : {avg_no_cache/avg_cache:.2f}×")
+
+```
+
+In this block of code, we first define the no-cache and cache versions of the generate function. The no-cache version is the original generate function, which is used to generate text from the model. The cache version is the same as the no-cache version, but it uses the KV cache to generate text from the model. 
+
+Then, we define the benchmark function, which is used to benchmark the no-cache and cache versions of the generate function. The benchmark function first generates text from the model using the no-cache version, and then from the model using the cache version. Finally, it prints the speedup of the cache version over the no-cache version.
+
+Running this code, we get:
+
+```text
+Tokens generated : 200
+No KV cache      : 1.305s  (153.3 tok/s)
+With KV cache    : 1.172s  (170.7 tok/s)
+Speedup          : 1.11×
+
+```
+
+The main bottleneck at this point is because the model itself right now is so small to the point where the Python runtime overhead of running the model is the main bottleneck. But we can see that from a numerical standpoint, the KV cache is speeding up the tokens per second being generated. 
+
+## Conclusion
+
+In conclusion, we were able to achieve a small speedup in token generation speed by using a small KV cache optimization. By preventing the unnecessary recomputation of past tokens, we can achieve speedup in token generation. 
+
+## Errors I encountered:
+
+1. Previously, I was doing the estimate loss loop very frequently, which greatly slowed down the training process on the free Google Colab GPU that I had access to. I ended up changing the code so that it ran every 500 iterations instead of every 100 iterations. This greatly sped things up.
+
+2. I tried to use `torch.compile` on the model but it turned out that with my custom implemented key and value caches, the behavior of this command doesn't often play well. Torch compile creates a computated graph that it replays during inference, but since the KV cache is mutable and frequently changing, it can corrupt the graph. 
+
+3. There was a time when my validating loss wasn't going down. I found that in my estimate loss function, since I wasn't using dropout, there was no difference between having `model.train()` and `model.eval()` called. Once I removed this from the estimation loss loop, the displayed numbers went down quite fast. 
+
+4. After my training finished, I encountered this:
+
+```text
+
+AcceleratorError                          Traceback (most recent call last)
+/tmp/ipykernel_2203/257733165.py in <cell line: 0>()
+    351 # generate from the model
+    352 context = torch.zeros((1, 1), dtype=torch.long, device=device)
+--> 353 print(decode(generate_kv_cache(m, context, max_num_tokens=500)[0].tolist()))
+    354 # print(decode(m.generate(context, max_new_tokens=500)[0].tolist()))
+
+/tmp/ipykernel_2203/257733165.py in generate_kv_cache(model, idx, max_num_tokens)
+    313             curr_pos = idx.shape[1]
+    314 
+--> 315             logits, _ = model(idx[:, -1:], pos=torch.tensor([[curr_pos]], device=device))
+    316             logits = logits[:, -1, :]
+    317 
+
+AcceleratorError: CUDA error: device-side assert triggered
+Search for `cudaErrorAssert' in https://docs.nvidia.com/cuda/cuda-runtime-api/group__CUDART__TYPES.html for more information.
+CUDA kernel errors might be asynchronously reported at some other API call, so the stacktrace below might be incorrect.
+For debugging consider passing CUDA_LAUNCH_BLOCKING=1
+Compile with `TORCH_USE_CUDA_DSA` to enable device-side assertions.
+
+```
+
+The cause of this was that my positional embeddings table only had 32 entries, so when I was generating over 500 tokens initially, the out of bound error was being thrown. In order to fix this, I had to limit the number of generated tokens to be less than the block size, so a max of 31. 
+
+This is a real limitation worth mentioning — with a fixed-size learned position embedding table and a simple KV cache, you can only generate up to block_size total tokens (prompt + generated). Production models solve this with either RoPE (rotary positional embeddings, which don't have a table), or a sliding window cache that evicts old entries and reuses positions.
+
+Thanks for reading! Hopefully it helps!
+
+CZ
