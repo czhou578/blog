@@ -225,11 +225,11 @@ def continuous_batching_generate(model, request_queue, max_batch_size=4, token_b
 
 Here's a visual overview of the entire loop:
 
-```mermaid
+<div class="mermaid">
 flowchart TD
     START(["🚀 Start"]) --> INIT["Initialize lists:<br/><b>active_requests</b> = []<br/><b>prefilling_requests</b> = []<br/><b>completed_requests</b> = []<br/>step = 0, queue_idx = 0"]
 
-    INIT --> WHILE{"active_requests OR<br/>queue_idx < len(queue) OR<br/>prefilling_requests?"}
+    INIT --> WHILE{"active_requests OR<br/>queue_idx &lt; len(queue) OR<br/>prefilling_requests?"}
 
     WHILE -- No --> RETURN(["✅ Return completed_requests"])
 
@@ -240,7 +240,7 @@ flowchart TD
 
     BUDGET["Calculate budget:<br/><b>remaining = token_budget − len(active)</b>"]
 
-    BUDGET --> HAS_BUDGET{"remaining > 0<br/>AND prefilling_requests<br/>not empty?"}
+    BUDGET --> HAS_BUDGET{"remaining &gt; 0<br/>AND prefilling_requests<br/>not empty?"}
 
     HAS_BUDGET -- Yes --> CHUNK["Compute chunk slice:<br/><b>chunk_size = min(remaining, tokens_left)</b><br/>Slice prompt[cursor : cursor + chunk_size]<br/>Advance <b>prefill_cursor</b> += chunk_size"]
 
@@ -271,7 +271,7 @@ flowchart TD
     DECODE_PHASE -- Yes --> DECODE
 
     subgraph DECODE ["🟢 Decode Forward Pass"]
-        DECODE_BATCH["Assemble batch:<br/>Concat last tokens from all active reqs<br/>Build positions & attention masks<br/><b>assemble_batch_cache()</b>"]
+        DECODE_BATCH["Assemble batch:<br/>Concat last tokens from all active reqs<br/>Build positions &amp; attention masks<br/><b>assemble_batch_cache()</b>"]
         DECODE_BATCH --> MODEL_D["<b>model(batch_tokens, past_kvs, pos, attn_mask)</b><br/>→ logits, new_kvs"]
         MODEL_D --> DISASSEMBLE["<b>disassemble_batch_cache()</b><br/>Store per-request KV slices back"]
         DISASSEMBLE --> SAMPLE_D["Sample next token per request<br/>Append to generated_tokens"]
@@ -290,7 +290,7 @@ flowchart TD
     KEEP --> STEP
 
     STEP["step += 1"] --> WHILE
-```
+</div>
 
 Let's walk through the key changes from the continuous batching version:
 
