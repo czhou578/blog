@@ -506,4 +506,6 @@ Between this toy implementation and a production system like vLLM, there's a lon
 
 None of these change the core loop. Admit requests, prefill them, decode in a shared batch, evict when done — that's exactly what we built here, just with 200 lines of Python instead of 200,000.
 
+You can find the entire code at this link: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_cont_batching.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_cont_batching.ipynb)
+
 CZ
