@@ -4,7 +4,7 @@ title: "Adding Continuous Batching to NanoGPT"
 date: 2026-05-11
 ---
 
-In a [previous post](/adding-kv-cache-to-nanogpt), I added a KV cache to NanoGPT — Karpathy's from-scratch GPT trained on Shakespeare. That let us avoid recomputing past keys and values, cutting decode from O(n²) to O(n) and giving us a moderate speedup in tokens per second. But we were still serving one request at a time. `B` in the batch dimension was always 1 during generation.
+In a [previous post](/blog/2026/05/10/adding-kv-cache-to-nanogpt), I added a KV cache to NanoGPT — Karpathy's from-scratch GPT trained on Shakespeare. That let us avoid recomputing past keys and values, cutting decode from O(n²) to O(n) and giving us a moderate speedup in tokens per second. But we were still serving one request at a time. `B` in the batch dimension was always 1 during generation.
 
 A real inference server doesn't do that. It packs multiple requests into a single batch and lets them arrive and leave independently — some requests are still generating while new ones join and finished ones depart. This is called continuous batching, and in this post I'm going to build it from scratch on top of our toy model.
 
