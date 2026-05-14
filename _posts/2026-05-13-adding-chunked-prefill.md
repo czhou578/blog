@@ -9,7 +9,7 @@ date: 2026-05-13
   mermaid.initialize({ startOnLoad: true });
 </script>
 
-In the [previous post](/adding-continuous-batching), we built a continuous batching scheduler for NanoGPT. Requests can now arrive and leave the decode batch independently — the GPU stays busy, and no request waits for anyone else to finish. But there's still a problem hiding in the prefill step.
+In the [previous post](/blog/2026/05/11/adding-continuous-batching), we built a continuous batching scheduler for NanoGPT. Requests can now arrive and leave the decode batch independently — the GPU stays busy, and no request waits for anyone else to finish. But there's still a problem hiding in the prefill step.
 
 When a new request arrives, we run its entire prompt through the model in one shot. For a 9-token Shakespeare prompt, this is fine. But what if the prompt is 2,000 tokens? Or 8,000? That single prefill forward pass monopolizes the GPU for the entire duration, and every request currently decoding has to wait. Their users stare at a frozen cursor. In production, this is called **prefill starvation**, and it's one of the main reasons inference servers implement chunked prefill.
 
