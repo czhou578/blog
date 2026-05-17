@@ -9,7 +9,7 @@ date: 2026-05-17
   mermaid.initialize({ startOnLoad: true });
 </script>
 
-In the previous post, we added chunked prefill to Andrej Karpathy's NanoGPT. We will continue in our quest to optimize the inference layer of our NanoGPT model by adding a scheduler. 
+In the [previous post](/blog/2026/05/13/adding-chunked-prefill), we added chunked prefill to Andrej Karpathy's NanoGPT. We will continue in our quest to optimize the inference layer of our NanoGPT model by adding a scheduler. 
 
 ## Problem
 
