@@ -1,8 +1,13 @@
 ---
 layout: post
 title: "Adding Scheduling to NanoGPT"
-date: 2026-05-13
+date: 2026-05-17
 ---
+
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true });
+</script>
 
 In the previous post, we added chunked prefill to Andrej Karpathy's NanoGPT. We will continue in our quest to optimize the inference layer of our NanoGPT model by adding a scheduler. 
 
@@ -13,6 +18,23 @@ Right now, our NanoGPT model is operating in a FCFS (First Come First Serve) man
 In a real server, if a very long low priority batch job arrives first and hogs the token budget for many steps, a short high priority request would be forced to wait possibly a long time before processing.
 
 Having a scheduler can preempt the low-priority job, serve the high-priority one immediately, and resume the evicted request when resources free up. This is exactly how vLLM's scheduler manages competing requests under memory pressure.
+
+Here's the request lifecycle with scheduling. The key addition compared to our chunked prefill post is the preemption arrow — an active request can be evicted back to waiting if the system runs out of KV memory:
+
+<div class="mermaid">
+stateDiagram-v2
+    direction LR
+    [*] --> waiting
+    waiting --> prefilling : _maybe_admit
+    prefilling --> active : is_fully_prefilled
+    active --> done : is_done
+    active --> waiting : _maybe_preempt
+    done --> [*]
+
+    note right of waiting : Heap-ordered by\n(priority, arrival_time)
+    note right of active : Decoding 1 token/step\nKV cache grows each step
+    note left of waiting : Preempted requests\nre-enter here with\ncache cleared
+</div>
 
 ## The Request Dataclass
 
@@ -111,9 +133,62 @@ We would have to do the following:
 3. Reset `req.prefill_cursor = 0` and `req.status = "waiting"`.
 4. Move it to `self.preempted` (a separate list so you don't lose it).
 
-When the memory frees up again, he preempted request re-enters the waiting queue and must re-prefill from scratch. This is the recompute preemption strategy.
+When the memory frees up again, the preempted request re-enters the waiting queue and must re-prefill from scratch. This is the recompute preemption strategy.
 
 Question to ask yourself: Should preempted requests go to the front of the waiting queue (preserving their original priority) or to the back?
+
+Here's a concrete example. Two requests share a tight KV budget of 22 tokens. Request A (low priority) is actively decoding, Request B (high priority) arrives and needs prefilling. As B prefills and both caches grow, the system hits the memory limit — so the scheduler preempts A, clears its cache, and lets B finish. Once B completes and frees its memory, A re-enters and re-prefills from scratch:
+
+<div class="mermaid">
+sequenceDiagram
+    participant W as Waiting Queue
+    participant S as Scheduler
+    participant P as Prefilling
+    participant A as Active (Decoding)
+    participant D as Done
+
+    Note over W: Req A (pri=2), Req B (pri=0)
+
+    rect rgb(230, 245, 255)
+        Note right of S: Step 0-1: Admit &amp; prefill A
+        S->>W: _maybe_admit → pop A
+        W->>P: A moves to prefilling
+        P->>A: A fully prefilled → active
+    end
+
+    rect rgb(230, 245, 255)
+        Note right of S: Step 2: Admit B, A decoding
+        S->>W: _maybe_admit → pop B
+        W->>P: B moves to prefilling
+        Note over A: A decodes (KV grows)
+        Note over P: B prefill chunk 1
+    end
+
+    rect rgb(255, 235, 235)
+        Note right of S: Step 3: KV exceeds budget!
+        Note over S: kv_used &gt; max_kv_tokens
+        S->>A: _maybe_preempt → evict A
+        A->>W: A cache cleared, cursor=0
+        Note over W: A re-enters heap
+        Note over P: B prefill chunk 2
+    end
+
+    rect rgb(230, 255, 230)
+        Note right of S: Step 4-5: B finishes
+        P->>A: B fully prefilled → active
+        A->>D: B generates all tokens → done
+        Note over D: B completed ✓
+    end
+
+    rect rgb(230, 255, 230)
+        Note right of S: Step 6+: A re-enters
+        S->>W: _maybe_admit → pop A
+        W->>P: A re-prefills from scratch
+        P->>A: A fully prefilled → active
+        A->>D: A generates all tokens → done
+        Note over D: A completed ✓
+    end
+</div>
 
 `_maybe_preempt` is the safety valve that fires when the system is *already* over budget — something `_maybe_admit` tries to prevent, but can't always guarantee because active requests grow their KV caches by one token every decode step. It loops until memory usage drops below `max_kv_tokens`, each iteration picking the worst victim: the request with the highest priority number (lowest importance) and, among ties, the one that arrived most recently. The victim's KV cache is cleared, its `prefill_cursor` is reset to zero, and it's pushed back into the waiting heap — meaning it will have to re-prefill from scratch when it's eventually re-admitted. This is the **recompute preemption** strategy: we trade future GPU work (re-prefilling) for immediate memory relief.
 
@@ -625,5 +700,7 @@ AssertionError: ❌ KV cache has 18 entries, expected 20. Hint: generated_tokens
 
 ```
 In order to fix this, we need to reset `generated_tokens` to an empty list when a request is preempted. When `_maybe_preempt` clears the KV cache and resets `prefill_cursor`, the old generated tokens still linger — but after re-prefill, those orphaned tokens have no KV backing, creating the 2-entry mismatch. Adding `victim.generated_tokens = []` right after `victim.prefill_cursor = 0` in `_maybe_preempt` fixes the core bug. After that fix, the assertion is still off by 1 because the last generated token is sampled from logits but never fed back to the model, so the KV cache is always 1 shorter than the full sequence. The correct expected length is `len(req0.prompt_tokens) + req0.num_generated - 1`.
+
+The full code can be found here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_scheduling.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_scheduling.ipynb)
 
 CZ
