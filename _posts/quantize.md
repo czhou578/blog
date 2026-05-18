@@ -325,6 +325,6 @@ Dynamic quantization (0.69×) beats static (0.55×) on latency because it has le
 
 In production, with models like LLaMA-70B where a single forward pass involves billions of multiply-accumulate operations, the INT8 compute savings overwhelm the fixed overhead and you'd see the expected 2-4× speedup. For our tiny model, the takeaway is simpler: **quantization is a memory optimization first**. If your goal is to fit a model into limited VRAM or ship a smaller binary, quantization delivers immediately. The speed benefit is a bonus that only kicks in at scale.
 
-You can find the entire source code here: 
+You can find the entire source code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-static-quant.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-static-quant.ipynb)
 
 CZ
