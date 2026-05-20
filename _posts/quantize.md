@@ -26,6 +26,8 @@ More specifically, FP32 uses 1 bit for the sign, 8 bits for the exponent, and 23
 Exponent bits (determines the scale/magnitude — like "how big" the number is)
 Mantissa (or significand) bits (the actual precision digits after the leading 1)
 
+![alt text]({{ site.baseurl }}/images/mantissa.png)
+
 FP8 by itself is not a standardized format:
 
 | Variant | Sign | Exponent | Mantissa | Best For | Dynamic Range | Precision |
@@ -128,11 +130,11 @@ print(decode(out[0].tolist()))  # Should still be Shakespeare-ish
 
 Let's walk through this step by step.
 
-**Deep copy to CPU (lines 102-103).** `copy.deepcopy(model).cpu()` creates an independent clone of the model and moves it to CPU. Dynamic quantization in PyTorch's eager mode only supports CPU — the quantized INT8 kernels don't have CUDA implementations. We call `.eval()` to disable dropout and set batch norm to inference mode.
+**Deep copy to CPU.** `copy.deepcopy(model).cpu()` creates an independent clone of the model and moves it to CPU. Dynamic quantization in PyTorch's eager mode only supports CPU — the quantized INT8 kernels don't have CUDA implementations. We call `.eval()` to disable dropout and set batch norm to inference mode.
 
-**Verify device placement (lines 105-106).** A quick sanity check that all parameters actually landed on CPU. If any tensor is still on CUDA, the quantization call below will silently produce wrong results or crash.
+**Verify device placement.** A quick sanity check that all parameters actually landed on CPU. If any tensor is still on CUDA, the quantization call below will silently produce wrong results or crash.
 
-**`quantize_dynamic` (lines 108-112).** This is the one-line API that does all the work. It walks the model, finds every `nn.Linear` layer, and replaces it with a `DynamicQuantizedLinear`. "Dynamic" means the *weights* are quantized to INT8 ahead of time (stored as INT8), but the *activations* are quantized on-the-fly at each forward pass using the actual min/max of the input tensor. This is simpler than static quantization (no calibration step needed) but slightly slower because it computes activation scales at runtime.
+**`quantize_dynamic`.** This is the one-line API that does all the work. It walks the model, finds every `nn.Linear` layer, and replaces it with a `DynamicQuantizedLinear`. "Dynamic" means the *weights* are quantized to INT8 ahead of time (stored as INT8), but the *activations* are quantized on-the-fly at each forward pass using the actual min/max of the input tensor. This is simpler than static quantization (no calibration step needed) but slightly slower because it computes activation scales at runtime.
 
 This function ideally should be used for Transformer like models, and RNN's, or situations where you want quick quantization with minimal loss. 
 
@@ -144,11 +146,11 @@ Every invocation, it does the following in order for the activations:
 4. Perform the quantized matrix multiplication (int8 GEMM).
 5. Dequantize the result back to floating point (so the next layer can use it).
 
-**Inspect a quantized layer (lines 114-115).** We print the first attention projection layer to confirm it's now a `DynamicQuantizedLinear`, and verify the weight dtype is `torch.qint8` — each weight value is stored as an 8-bit integer instead of a 32-bit float, a 4× memory reduction per parameter.
+**Inspect a quantized layer.** We print the first attention projection layer to confirm it's now a `DynamicQuantizedLinear`, and verify the weight dtype is `torch.qint8` — each weight value is stored as an 8-bit integer instead of a 32-bit float, a 4× memory reduction per parameter.
 
-**Benchmark (lines 117-120).** We create a CPU context tensor and measure latency and model size. Note that `model_size_mb` may undercount the savings — PyTorch stores quantized weights as packed INT8 tensors, but `p.element_size()` might report the unpacked size depending on the version.
+**Benchmark.** We create a CPU context tensor and measure latency and model size. Note that `model_size_mb` may undercount the savings — PyTorch stores quantized weights as packed INT8 tensors, but `p.element_size()` might report the unpacked size depending on the version.
 
-**Generate text (lines 123-125).** Finally, we seed the RNG and generate 100 tokens to verify the quantized model still produces coherent Shakespeare. The output won't be identical to FP32 (quantization introduces small rounding errors), but it should be recognizably similar in quality.
+**Generate text.** Finally, we seed the RNG and generate 100 tokens to verify the quantized model still produces coherent Shakespeare. The output won't be identical to FP32 (quantization introduces small rounding errors), but it should be recognizably similar in quality.
 
 The result we get is 
 
@@ -175,11 +177,9 @@ Sed maks of qure of the maid thegnly so,
 
 3 takeaways:
 
-The model shrank from 0.84 MB → 0.03 MB — a ~28× reduction. This makes sense: INT8 weights are 4× smaller than FP32, and PyTorch's packed storage format compresses further.
-
-1292 ms → 1877 ms, about 45% slower. This is counterintuitive but expected for a tiny model like NanoGPT (210k params). Dynamic quantization adds overhead per forward pass (computing activation min/max, quantizing inputs, dequantizing outputs), and for a model this small, that overhead dominates any benefit from cheaper INT8 matmuls
-
-The generated text ("KING LIf madam: That is chard's to say...") is still recognizably Shakespeare-style, so the INT8 rounding errors didn't destroy the model's capabilities.
+- The model shrank from 0.84 MB → 0.03 MB — a ~28× reduction. This makes sense: INT8 weights are 4× smaller than FP32, and PyTorch's packed storage format compresses further.
+- 1292 ms → 1877 ms, about 45% slower. This is counterintuitive but expected for a tiny model like NanoGPT (210k params). Dynamic quantization adds overhead per forward pass (computing activation min/max, quantizing inputs, dequantizing outputs), and for a model this small, that overhead dominates any benefit from cheaper INT8 matmuls.
+- The generated text ("KING LIf madam: That is chard's to say...") is still recognizably Shakespeare-style, so the INT8 rounding errors didn't destroy the model's capabilities.
 
 ## Section 3: Static (Post-Training) Quantization
 
@@ -246,17 +246,17 @@ Let's break this down step by step.
 
 **The problem.** PyTorch's static quantization needs `QuantStub` and `DeQuantStub` markers to know where to convert between float and INT8. If you place them at the model level (wrapping the entire forward pass), the attention `bmm` operation breaks — there's no `QuantizedCPU` kernel for batched matrix multiplication. FX graph mode doesn't work either because our `Head.forward()` has data-dependent control flow (the `if past_kvs` branch). The fix is to wrap each Linear layer individually so quantization happens at the boundary of each matmul, while attention stays in float.
 
-**`QuantWrapper` (lines 171-178).** This is a thin `nn.Module` that sandwiches any layer between a `QuantStub` and `DeQuantStub`. On the forward pass, the float input gets quantized to INT8, passes through the wrapped module's INT8 kernel, and the output gets dequantized back to float. This means each wrapped Linear does `float → int8 → matmul → int8 → float`, while everything between (like attention's `bmm`) stays in float.
+**`QuantWrapper`.** This is a thin `nn.Module` that sandwiches any layer between a `QuantStub` and `DeQuantStub`. On the forward pass, the float input gets quantized to INT8, passes through the wrapped module's INT8 kernel, and the output gets dequantized back to float. This means each wrapped Linear does `float → int8 → matmul → int8 → float`, while everything between (like attention's `bmm`) stays in float.
 
-**Deep copy and disable model-level stubs (lines 180-184).** We deep copy the model to CPU (static quantization only works on CPU in eager mode) and replace the model-level `QuantStub`/`DeQuantStub` with `nn.Identity()` — since we're doing per-layer wrapping instead.
+**Deep copy and disable model-level stubs.** We deep copy the model to CPU (static quantization only works on CPU in eager mode) and replace the model-level `QuantStub`/`DeQuantStub` with `nn.Identity()` — since we're doing per-layer wrapping instead.
 
-**Fuse Linear + ReLU (lines 186-191).** For each transformer block, we fuse `net[0]` (Linear) and `net[1]` (ReLU) in the feedforward network into a single `LinearReLU` module. Fusing lets the quantized kernel apply ReLU directly on the INT8 output without an intermediate dequantize-requantize round trip, which is both faster and more accurate.
+**Fuse Linear + ReLU.** For each transformer block, we fuse `net[0]` (Linear) and `net[1]` (ReLU) in the feedforward network into a single `LinearReLU` module. Fusing lets the quantized kernel apply ReLU directly on the INT8 output without an intermediate dequantize-requantize round trip, which is both faster and more accurate.
 
-**Set qconfig (lines 193-194).** We grab the default quantization config for the `fbgemm` backend (Intel x86 optimized INT8 kernels). Setting `model_sq.qconfig = None` means nothing is quantized by default — we'll opt in layer by layer.
+**Set qconfig.** We grab the default quantization config for the `fbgemm` backend (Intel x86 optimized INT8 kernels). Setting `model_sq.qconfig = None` means nothing is quantized by default — we'll opt in layer by layer.
 
-**Wrap every Linear (lines 196-209).** For each transformer block, we wrap the feedforward layers (`net[0]` the fused LinearReLU, `net[2]` the second Linear), the attention output projection (`sa.proj`), and each head's key, query, and value projections. Each wrapped module gets assigned the `qcfg` so PyTorch knows it should be quantized. The final `lm_head` (the output projection from hidden dim to vocabulary size) is also wrapped.
+**Wrap every Linear.** For each transformer block, we wrap the feedforward layers (`net[0]` the fused LinearReLU, `net[2]` the second Linear), the attention output projection (`sa.proj`), and each head's key, query, and value projections. Each wrapped module gets assigned the `qcfg` so PyTorch knows it should be quantized. The final `lm_head` (the output projection from hidden dim to vocabulary size) is also wrapped.
 
-**Prepare for calibration (line 211).** `torch.ao.quantization.prepare()` walks the model and inserts *observer* modules at every `QuantStub`. Observers record the min/max activation ranges during calibration (the next step), which PyTorch uses to compute optimal scale and zero-point values for INT8 quantization.
+**Prepare for calibration.** `torch.ao.quantization.prepare()` walks the model and inserts *observer* modules at every `QuantStub`. Observers record the min/max activation ranges during calibration (the next step), which PyTorch uses to compute optimal scale and zero-point values for INT8 quantization.
 
 ### Section 3.1: Calibration
 
@@ -280,13 +280,13 @@ print(f"SQ INT8 | size: {sq_mb:.2f} MB | latency: {sq_ms:.1f} ms")
 
 ```
 
-**Calibration (lines 252-256).** We run 100 batches of validation data through the model. The inserted observers record the min/max activation values for each wrapped layer. This "burn-in" period is crucial: without it, the observers would see only zeros or outliers, leading to poor quantization scales and degraded accuracy.
+**Calibration.** We run 100 batches of validation data through the model. The inserted observers record the min/max activation values for each wrapped layer. This "burn-in" period is crucial: without it, the observers would see only zeros or outliers, leading to poor quantization scales and degraded accuracy.
 
-**Convert (line 258).** `torch.ao.quantization.convert()` finalizes the quantization. It uses the observed min/max ranges to compute optimal scale and zero-point values for each layer, then replaces the `QuantStub`/`DeQuantStub` wrappers with actual quantized linear modules (`QuantizedLinear`).
+**Convert.** `torch.ao.quantization.convert()` finalizes the quantization. It uses the observed min/max ranges to compute optimal scale and zero-point values for each layer, then replaces the `QuantStub`/`DeQuantStub` wrappers with actual quantized linear modules (`QuantizedLinear`).
 
-**Verify (lines 259-260).** We print the first attention projection layer to confirm it's now a `QuantizedLinear` with computed scale and zero-point. The `qscheme=torch.per_channel_affine` indicates per-channel quantization (different scale/zero-point per output channel), which is more accurate than per-tensor.
+**Verify.** We print the first attention projection layer to confirm it's now a `QuantizedLinear` with computed scale and zero-point. The `qscheme=torch.per_channel_affine` indicates per-channel quantization (different scale/zero-point per output channel), which is more accurate than per-tensor.
 
-**Benchmark (lines 262-264).** We measure latency and size again. You'll notice the size is identical to dynamic quantization (0.03 MB) — both use INT8 weights. The latency, however, is now ~2353 ms, slower than dynamic quantization's ~1877 ms. This is because static quantization's observers add overhead during calibration, and the per-channel dequantization in this eager implementation can be slower than dynamic's per-tensor approach for very small models.
+**Benchmark.** We measure latency and size again. You'll notice the size is identical to dynamic quantization (0.03 MB) — both use INT8 weights. The latency, however, is now ~2353 ms, slower than dynamic quantization's ~1877 ms. This slowdown isn't from the calibration phase, but rather the per-layer `QuantWrapper` overhead during inference (converting back and forth between float and INT8 at every layer), which dominates the execution time for very small models.
 
 Here is the result:
 
