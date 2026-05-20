@@ -138,6 +138,19 @@ Let's walk through this step by step.
 
 This function ideally should be used for Transformer like models, and RNN's, or situations where you want quick quantization with minimal loss. 
 
+<div class="mermaid">
+graph TD
+    A[FP32 Activations Input] -->|"Calculate min/max\n(Runtime)"| B(INT8 Activations)
+    W[(INT8 Weights\nPre-quantized)] --> C{INT8 MatMul}
+    B --> C
+    C -->|"Dequantize\n(Runtime)"| D[FP32 Output]
+    
+    style B fill:#34d399,stroke:#059669,color:#000
+    style W fill:#34d399,stroke:#059669,color:#000
+    style A fill:#bfdbfe,stroke:#3b82f6,color:#000
+    style D fill:#bfdbfe,stroke:#3b82f6,color:#000
+</div>
+
 Every invocation, it does the following in order for the activations:
 
 1. Compute the min/max (or range) of the current activation tensor.
@@ -247,6 +260,23 @@ Let's break this down step by step.
 **The problem.** PyTorch's static quantization needs `QuantStub` and `DeQuantStub` markers to know where to convert between float and INT8. If you place them at the model level (wrapping the entire forward pass), the attention `bmm` operation breaks — there's no `QuantizedCPU` kernel for batched matrix multiplication. FX graph mode doesn't work either because our `Head.forward()` has data-dependent control flow (the `if past_kvs` branch). The fix is to wrap each Linear layer individually so quantization happens at the boundary of each matmul, while attention stays in float.
 
 **`QuantWrapper`.** This is a thin `nn.Module` that sandwiches any layer between a `QuantStub` and `DeQuantStub`. On the forward pass, the float input gets quantized to INT8, passes through the wrapped module's INT8 kernel, and the output gets dequantized back to float. This means each wrapped Linear does `float → int8 → matmul → int8 → float`, while everything between (like attention's `bmm`) stays in float.
+
+<div class="mermaid">
+graph LR
+    subgraph "QuantWrapper (nn.Linear)"
+        A[FP32 Input] -->|"QuantStub()"| B(INT8 Tensor)
+        B -->|"INT8 Kernel"| C{INT8 MatMul}
+        C -->|"DeQuantStub()"| D(FP32 Tensor)
+    end
+    
+    D -->|"Flows into next layer"| E[Attention bmm\n(Stays FP32!)]
+    
+    style B fill:#34d399,stroke:#059669,color:#000
+    style C fill:#34d399,stroke:#059669,color:#000
+    style A fill:#bfdbfe,stroke:#3b82f6,color:#000
+    style D fill:#bfdbfe,stroke:#3b82f6,color:#000
+    style E fill:#bfdbfe,stroke:#3b82f6,color:#000
+</div>
 
 **Deep copy and disable model-level stubs.** We deep copy the model to CPU (static quantization only works on CPU in eager mode) and replace the model-level `QuantStub`/`DeQuantStub` with `nn.Identity()` — since we're doing per-layer wrapping instead.
 
