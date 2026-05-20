@@ -258,6 +258,8 @@ Let's break this down step by step.
 
 **Prepare for calibration.** `torch.ao.quantization.prepare()` walks the model and inserts *observer* modules at every `QuantStub`. Observers record the min/max activation ranges during calibration (the next step), which PyTorch uses to compute optimal scale and zero-point values for INT8 quantization.
 
+![Static Quantization Calibration]({{ site.baseurl }}/images/quant_calibration.png)
+
 ### Section 3.1: Calibration
 
 ```python
