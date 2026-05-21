@@ -268,13 +268,13 @@ Let's break this down step by step.
 
 <div class="mermaid">
 graph LR
-    subgraph "QuantWrapper (nn.Linear)"
+    subgraph QuantWrapper ["QuantWrapper (nn.Linear)"]
         A[FP32 Input] -->|"QuantStub()"| B(INT8 Tensor)
         B -->|"INT8 Kernel"| C{INT8 MatMul}
         C -->|"DeQuantStub()"| D(FP32 Tensor)
     end
     
-    D -->|"Flows into next layer"| E[Attention bmm\n(Stays FP32!)]
+    D -->|"Flows into next layer"| E["Attention bmm\n(Stays FP32!)"]
     
     style B fill:#34d399,stroke:#059669,color:#000
     style C fill:#34d399,stroke:#059669,color:#000
