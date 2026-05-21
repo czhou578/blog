@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Quantizing NanoGPT"
-date: 2026-05-17
+date: 2026-05-20
 ---
 
 <script type="module">
