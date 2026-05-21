@@ -4,13 +4,18 @@ title: "Quantizing NanoGPT"
 date: 2026-05-17
 ---
 
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true });
+</script>
+
 In the [previous post](/blog/2026/05/17/adding-scheduling), we added a scheduler to NanoGPT. The benefit of this is that we can now serve multiple requests at once, and we can also preempt requests if needed. 
 
 In real life production ML systems, there is still one major bottleneck that we have yet to address. If we were to attempt to deploy big models with large numbers parameter counts, memory will still be a major issue. 
 
 This is where **quantization** comes in.
 
-By definition, quantization is the process of reducing the precision of the weights in a neural network. When you hear online about training in a FP32 precision and then deplying it in FP16 or INT8, that is quantization!
+By definition, quantization is the process of reducing the precision of the weights in a neural network. When you hear online about training in a FP32 precision and then deploying it in FP16 or INT8, that is quantization!
 
 First, a small primer with real examples.
 
