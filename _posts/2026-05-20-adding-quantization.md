@@ -4,7 +4,7 @@ title: "Quantizing NanoGPT"
 date: 2026-05-17
 ---
 
-In the previous post, we added a scheduler to NanoGPT. The benefit of this is that we can now serve multiple requests at once, and we can also preempt requests if needed. 
+In the [previous post](/blog/2026/05/17/adding-scheduling), we added a scheduler to NanoGPT. The benefit of this is that we can now serve multiple requests at once, and we can also preempt requests if needed. 
 
 In real life production ML systems, there is still one major bottleneck that we have yet to address. If we were to attempt to deploy big models with large numbers parameter counts, memory will still be a major issue. 
 
