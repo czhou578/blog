@@ -4,16 +4,22 @@ title: "Adding Prefix Caching to NanoGPT"
 date: 2026-05-17
 ---
 
-In the previous post, we discussed how to quantize NanoGPT. Since we didn't achieve significant improvements in performance due to the limitations of static quantization on our toy model, we're going to pivot to a different optimization technique: prefix caching. 
+<script type="module">
+  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+  mermaid.initialize({ startOnLoad: true });
+</script>
+
+In the [previous post](/blog/2026/05/20/adding-quantization), we discussed how to quantize NanoGPT. Since we didn't achieve significant improvements in performance due to the limitations of static quantization on our toy model, we're going to pivot to a different optimization technique: **prefix caching**. 
 
 ## Problem
 
-So far, we have a scheduling system in NanoGPT that can handle multiple requests at a time. However, we are still recomputing the KV cache for each request every time we generate a new token. If the user were to send prompts that had a common prefix, we would be recomputing the KV cache for that common prefix every time. This is inefficient.
+So far, we have a scheduling system in NanoGPT that can handle multiple requests at a time. However, we are still **recomputing** the KV cache for each request every time we generate a new token. If the user were to send prompts that had a common prefix, we would be recomputing the KV cache for that common prefix every time. This is inefficient.
 
 **Prefix caching** stores completed KV blocks in a content-addressed cache. When Request B arrives and its prompt starts with the same tokens as Request A, the scheduler finds the cached KV blocks, skips the prefill for those tokens, and only computes the **suffix** (e.g. `"Goodbye"`). This directly reduces TTFT or time to first token.
 
-In production (vLLM's Automatic Prefix Caching), this cuts prefill compute by 50–90% for
-workloads with shared system prompts — which is the vast majority of API deployments.
+In production (vLLM's Automatic Prefix Caching), this cuts prefill compute by 50–90% for workloads with shared system prompts — which is the vast majority of API deployments.
+
+To put that in concrete numbers: imagine 1,000 API calls all starting with the same 512-token system prompt. Without prefix caching, you run 512 × 1,000 = **512,000 prefill tokens** through the transformer. With prefix caching, you run 512 once, cache the KV blocks, and the other 999 requests skip straight to their unique suffix — that's **511,488 fewer forward-pass tokens**, or a 99.9% reduction in redundant prefill compute.
 
 ## Why This Matters Even at 210K Params
 
@@ -21,10 +27,8 @@ We won't see a meaningful wall-clock improvement on nanoGPT — the model is too
 
 1. **Content-addressed hashing** — KV blocks are keyed by their token content, not by request ID or position.
 2. **Chained hashes** — each block's hash includes its parent's hash, so the entire prefix history is captured transitively.
-3. **LRU eviction** — when memory is full, the least-recently-used cached blocks are evicted
-   to make room for new ones.
-4. **The scheduler integrates cache hits** — cached tokens are subtracted from the work to do,
-   so a fully-cached prefix means near-zero prefill cost.
+3. **LRU eviction** — when memory is full, the least-recently-used cached blocks are evicted to make room for new ones.
+4. **The scheduler integrates cache hits** — cached tokens are subtracted from the work to do, so a fully-cached prefix means near-zero prefill cost.
 
 The goal is to learn the architecture, not hit a perf number.
 
@@ -32,11 +36,11 @@ The goal is to learn the architecture, not hit a perf number.
 
 Right now, our KV cache is per-request and per-(layer, head). 
 
-For prefix caching, we are going to have think in terms of **fixed-size blocks** of tokens. 
+For prefix caching, we are going to have to think in terms of **fixed-size blocks** of tokens. 
 
-The reason is that caching will be easier. If we had a request wih 100 tokens, storing each token in the cache would mean 100 lookups. 
+The reason is that caching will be easier. If we had a request with 100 tokens, storing each token in the cache would mean 100 lookups. 
 
-In addition, memory management becomes easier, since we now have a natural unit of allocation. Each cached entry is a fixed size chunk per layer, and there is no fragementation of memory that you would otherweise have with per token storage. 
+In addition, memory management becomes easier, since we now have a natural unit of allocation. Each cached entry is a fixed size chunk per layer, and there is no fragmentation of memory that you would otherwise have with per token storage. 
 
 Finally, the semantics become very clear for the developer. If we see a block is in the cache, we can be certain that its hash is meaningful.
 
@@ -50,11 +54,42 @@ Block 1: tokens[4:8]   → KV for positions 4, 5, 6, 7
 Block 2: tokens[8:12]  → KV for positions 8, 9, 10, 11
 ```
 
+<div class="mermaid">
+graph LR
+    subgraph Prompt ["14-Token Prompt"]
+        direction LR
+        B0["Block 0<br>(Tokens 0-3)"]:::full
+        B1["Block 1<br>(Tokens 4-7)"]:::full
+        B2["Block 2<br>(Tokens 8-11)"]:::full
+        B3["Partial Tail<br>(Tokens 12-13)"]:::partial
+        
+        B0 --> B1 --> B2 --> B3
+    end
+    
+    C["Global BlockCache"]:::cache
+    
+    B0 -.->|"Eligible to Cache ✅"| C
+    B1 -.->|"Eligible to Cache ✅"| C
+    B2 -.->|"Eligible to Cache ✅"| C
+    B3 -.->|"Never Cached ❌<br>(Incomplete)"| B3
+    
+    classDef full fill:#10b981,stroke:#047857,color:#fff,stroke-width:2px;
+    classDef partial fill:#ef4444,stroke:#b91c1c,color:#fff,stroke-width:2px;
+    classDef cache fill:#3b82f6,stroke:#1d4ed8,color:#fff,stroke-dasharray: 5 5;
+</div>
+
 Each block stores a fixed-size KV chunk: `(1, BLOCK_SIZE, head_size)` per (layer, head).
 Only **full** blocks (exactly `BLOCK_SIZE` tokens) are eligible for caching. The trailing
 partial block is never cached — it changes with every new decode token.
 
 **Question to ask yourself:** Why can't you cache partial blocks?
+
+<details>
+<summary>Answer</summary>
+
+A partial block is still being built — every new decode token extends it, which would change its content and invalidate any hash you computed. You'd insert a block into the cache, then immediately need to delete it and re-insert a different version on the very next step. Only full blocks are "sealed" — their content will never change, so their hash is stable and their KV tensors are final.
+
+</details>
 
 ## Global Cache:
 
@@ -136,6 +171,27 @@ Request A: ["The", "cat", "sat", "on"] ["the", "mat", ".", "!"]
 Request B: ["The", "dog", "sat", "on"] ["the", "mat", ".", "!"]
 ```
 
+<div class="mermaid">
+graph TD
+    subgraph ReqA ["Request A"]
+        A0["Block 0<br>['The cat sat on']"]:::block
+        A1["Block 1<br>['the mat . !']"]:::identical
+        A0 -->|"Parent Hash A"| A1
+    end
+    
+    subgraph ReqB ["Request B"]
+        B0["Block 0<br>['The dog sat on']"]:::block
+        B1["Block 1<br>['the mat . !']"]:::identical
+        B0 -->|"Parent Hash B"| B1
+    end
+
+    A1 -->|"Hash A1<br>(Unique!)"| CACHEA["Cache Entry A"]
+    B1 -->|"Hash B1<br>(Unique!)"| CACHEB["Cache Entry B"]
+
+    classDef block fill:#374151,stroke:#111827,color:#fff;
+    classDef identical fill:#3b82f6,stroke:#1d4ed8,color:#fff,stroke-width:3px;
+</div>
+
 Block 1 (`["the", "mat", ".", "!"]`) has the **same token IDs** in both requests. But the
 KV tensors are numerically different — in Request A, every token in Block 1 attended to
 `"The cat sat on"`, while in Request B it attended to `"The dog sat on"`. The K and V
@@ -193,14 +249,12 @@ def find_cached_prefix(block_cache, prompt_tokens, block_size):
 
 Once we know how many tokens are cached, we can skip the corresponding KV computations and directly copy the cached values into the request's KV cache. The remaining tokens (if any) are then computed normally.
 
-Here is the function code to do this:
-
 ```python
 
 def load_cached_blocks(request, block_cache, prompt_tokens, block_size):
     """ 
     Load cached KV blocks onto a request and return how many tokens were cached. 
-    Sets request.prefill_cursor to skip past the cached potion
+    Sets request.prefill_cursor to skip past the cached portion
     """
 
     parent_hash = NONE_HASH
@@ -308,6 +362,37 @@ def commit_completed_blocks(request, block_cache, block_size):
 
 Once we know how many tokens are cached, we can skip the corresponding KV computations and directly copy the cached values into the request's KV cache. The remaining tokens (if any) are then computed normally.
 
+<div class="mermaid">
+graph LR
+    subgraph Prompt ["Incoming Prompt (5 Blocks)"]
+        direction LR
+        B0["Block 0"]:::hit
+        B1["Block 1"]:::hit
+        B2["Block 2"]:::hit
+        B3["Block 3"]:::miss
+        B4["Block 4<br>(Partial)"]:::miss
+        
+        B0 --> B1 --> B2 --> B3 --> B4
+    end
+
+    Mem[("Global<br>BlockCache")]:::cache
+    GPU["GPU Compute<br>(Transformer)"]:::compute
+    
+    Mem -->|"Memory Copy<br>(Fast)"| B0
+    Mem -->|"Memory Copy<br>(Fast)"| B1
+    Mem -->|"Memory Copy<br>(Fast)"| B2
+    
+    B2 -.->|"prefill_cursor"| B3
+    
+    B3 -.->|"Forward Pass<br>(Slow)"| GPU
+    B4 -.->|"Forward Pass<br>(Slow)"| GPU
+
+    classDef hit fill:#10b981,stroke:#047857,color:#fff;
+    classDef miss fill:#f59e0b,stroke:#b45309,color:#fff;
+    classDef cache fill:#3b82f6,stroke:#1d4ed8,color:#fff;
+    classDef compute fill:#ef4444,stroke:#b91c1c,color:#fff;
+</div>
+
 ```python
 def prefill_with_cache(model, request, block_cache, block_size):
     """
@@ -383,12 +468,43 @@ def prefill_with_cache(model, request, block_cache, block_size):
     return num_computed, kv_cache
 ```
 
+**Find cached prefix.** First, we call `find_cached_prefix` to walk the prompt left-to-right and count how many leading tokens already have KV blocks in the global cache. This returns a token count (always a multiple of `block_size`).
+
+**Compute the suffix.** If any tokens remain after the cached prefix, we slice the prompt from `num_cached` onward and run those tokens through the model to get fresh KV tensors. If the entire prompt was cached (`num_cached == num_prompt`), we skip the forward pass entirely — prefill cost is zero.
+
+**Cache newly computed blocks.** For each full block in the newly computed suffix, we extract the corresponding KV slice, compute its chained hash (using the last cached block's hash as the parent), and insert it into the `BlockCache`. This ensures that future requests with overlapping prefixes can reuse this work.
+
+**Assemble the full KV cache.** Finally, we copy the cached KV blocks and the newly computed KV tensors into a single unified cache for the request. The cached blocks are looked up by hash and appended in order, followed by the fresh tensors. The result is a complete KV cache covering the entire prompt, as if we had prefilled from scratch — but with most of the GPU work skipped.
+
+## How It All Fits Together
+
+Before diving into the tests, here's the call order during a single scheduler step when a new request is admitted. These are the same functions we just walked through, shown in the order the scheduler calls them:
+
+<div class="mermaid">
+graph LR
+    A["_maybe_admit"] -->|"How much is cached?"| B["find_cached_prefix"]
+    B -->|"Load KV into request"| C["load_cached_blocks"]
+    C -->|"Prefill remaining tokens"| D["Transformer Forward Pass"]
+    D -->|"Save new blocks"| E["commit_completed_blocks"]
+    
+    style A fill:#374151,stroke:#111827,color:#fff;
+    style B fill:#3b82f6,stroke:#1d4ed8,color:#fff;
+    style C fill:#3b82f6,stroke:#1d4ed8,color:#fff;
+    style D fill:#ef4444,stroke:#b91c1c,color:#fff;
+    style E fill:#10b981,stroke:#047857,color:#fff;
+</div>
+
+1. **`_maybe_admit`** — the scheduler checks if there's room for a new request.
+2. **`find_cached_prefix`** — walks the prompt's blocks against the global cache to count how many tokens are already cached.
+3. **`load_cached_blocks`** — copies the cached KV tensors into the request's local cache and advances `prefill_cursor`.
+4. **Transformer forward pass** — only the uncached suffix tokens are actually computed.
+5. **`commit_completed_blocks`** — after prefill, any newly completed full blocks are cloned and inserted into the global cache for future requests.
+
 ## Tests
 
 ### Test 1: Identical prefixes
 
-Two requests with identical prompts. The second request should reuse all complete blocks
-from the first, prefilling only the trailing partial block (if any) plus zero new full blocks.
+This is the simplest and most important test: two requests with the exact same prompt. When Request 0 finishes prefilling, its full blocks are committed to the global cache. When Request 1 is admitted, `find_cached_prefix` should hit every one of those blocks, allowing the scheduler to skip nearly all of the prefill work. The only tokens that need computing are the trailing partial block (if any) that wasn't eligible for caching.
 
 ```python
 requests = [
@@ -617,6 +733,6 @@ Test 4: Cache eviction under memory pressure
 
 The remaining blocks have access steps `[1, 2, 3]` — step 0 is gone, confirming that `_evict_lru` correctly identified and removed the oldest block. This is the same eviction strategy used in production systems like vLLM: when GPU memory is full, the least-recently-accessed KV blocks are discarded first. The rationale is that blocks accessed recently are more likely to be needed again (e.g., a popular system prompt), while stale blocks from old requests are safe to discard. If a future request needs an evicted block, it simply re-prefills those tokens — a cache miss costs compute, not correctness.
 
-Thanks for reading! You can find the link to the entire source code at
+Thanks for reading! You can find the entire source code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_prefix_caching.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_prefix_caching.ipynb)
 
 CZ
