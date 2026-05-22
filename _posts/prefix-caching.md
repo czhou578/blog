@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Adding Prefix Caching to NanoGPT"
-date: 2026-05-17
+date: 2026-05-22
 ---
 
 <script type="module">
@@ -23,7 +23,7 @@ To put that in concrete numbers: imagine 1,000 API calls all starting with the s
 
 ## Why This Matters Even at 210K Params
 
-We won't see a meaningful wall-clock improvement on nanoGPT — the model is too small and the prompts too short for the cache lookup overhead to pay for itself. But the concepts are exactly what vLLM implements:
+We won't see a meaningful wall-clock improvement on nanoGPT — the model is too small and the prompts too short for the cache lookup overhead to pay for itself. But the concepts are exactly what inference systems like vLLM implements:
 
 1. **Content-addressed hashing** — KV blocks are keyed by their token content, not by request ID or position.
 2. **Chained hashes** — each block's hash includes its parent's hash, so the entire prefix history is captured transitively.
@@ -38,7 +38,7 @@ Right now, our KV cache is per-request and per-(layer, head).
 
 For prefix caching, we are going to have to think in terms of **fixed-size blocks** of tokens. 
 
-The reason is that caching will be easier. If we had a request with 100 tokens, storing each token in the cache would mean 100 lookups. 
+The reason is that caching will be easier this way. If we had a request with 100 tokens, storing each token in the cache would mean 100 lookups. 
 
 In addition, memory management becomes easier, since we now have a natural unit of allocation. Each cached entry is a fixed size chunk per layer, and there is no fragmentation of memory that you would otherwise have with per token storage. 
 
