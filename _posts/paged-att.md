@@ -472,37 +472,140 @@ def disassemble_paged_fused(all_reqs, new_kvs, num_new_per_req, pool, block_size
 
 **Advance the fill counter.** After all layers and heads have been written, we update each request's `num_filled_slots` by adding the number of new tokens it just processed. This is done in a separate loop *after* the KV writes because `write_kv_to_pool` reads `num_filled_slots` as the start position — if we updated it mid-loop, later layers would write to the wrong slots.
 
-## The Scheduler
+## The Generate function
 
 ```python
-def _maybe_admit(self, step):
-    # ... existing checks ...
-    
-    candidate = self.waiting[0]
-    prompt_len = len(candidate.prompt_tokens)
-    blocks_needed = (prompt_len + self.block_size - 1) // self.block_size
-    
-    # Check if pool has enough free blocks
-    if self.block_allocator.num_free < blocks_needed:
-        return  # can't fit
-    
-    # Admit and allocate blocks
-    heapq.heappop(self.waiting)
-    candidate.block_table = self.block_allocator.allocate_n(blocks_needed)
-    candidate.num_filled_slots = 0
-    candidate.status = "prefilling"
-    self.prefilling.append(candidate)
+
+from numpy import remainder
+## Interleave generate
+
+def interleaved_generate(model, requests, policy="fcfs", token_budget=16, max_kv_tokens=256):
+    scheduler = Scheduler(policy, token_budget=token_budget, max_kv_tokens=max_kv_tokens)
+    head_size = n_embd // n_head
+    num_blocks = max_kv_tokens // block_size
+    pool = KVBlockPool(num_blocks, block_size, n_layer, n_head, head_size, device)
+    scheduler.block_allocator = BlockAllocator(num_blocks)
+
+    step = 0
+
+    for req in requests:
+        req.arrival_time = step
+        scheduler.add_request(req)
+
+    model.eval()
+
+    with torch.no_grad():
+        while not scheduler.is_done():
+            prefill_req, decode_reqs = scheduler.schedule(step)
+
+            chunk_size = 0
+            remaining_budget = token_budget - len(decode_reqs)
+
+            if remaining_budget > 0 and prefill_req is not None:
+                tokens_left = len(prefill_req.prompt_tokens) - prefill_req.prefill_cursor
+
+                chunk_size = min(remaining_budget, tokens_left)
+
+            if chunk_size == 0 and not decode_reqs:
+                step += 1
+                continue
+
+            for req in decode_reqs:
+                maybe_allocate_block(req, scheduler.block_allocator, block_size)
+
+            # 3. ── SINGLE FUSED MODEL CALL ──
+            # Use your already-written helper to build the batched inputs
+            batch_tokens, batch_positions, past_kvs, attn_mask, pad_lengths = assemble_fused_batch(
+                decode_reqs, 
+                prefill_req if chunk_size > 0 else None, 
+                chunk_size,
+                pool,
+                block_size
+            )
+
+            logits, _, new_kvs = model(
+                batch_tokens,
+                pos=batch_positions,
+                past_kvs=past_kvs,
+                attn_mask=attn_mask
+            )
+
+            ## DISASSEMBLY
+
+            all_reqs = decode_reqs[:]
+            num_new_tokens_per_req = [1] * len(decode_reqs)
+
+            if chunk_size > 0:
+                all_reqs.append(prefill_req)
+                num_new_tokens_per_req.append(chunk_size)
+                
+            disassemble_paged_fused(all_reqs, new_kvs, num_new_tokens_per_req, pool, block_size)  # CHANGED
+            
+            # 5. ── POST-PROCESSING ──
+            # Handle decode requests (they are the first N rows in the batch)
+
+            if len(decode_reqs) > 0:
+                logits_decode = logits[:len(decode_reqs), -1, :]
+                probs = F.softmax(logits_decode, dim=-1)
+                idx_next = torch.multinomial(probs, num_samples=1)
+
+                for i, req in enumerate(decode_reqs):
+                    req.generated_tokens.append(idx_next[i].item())
+                    req._last_token = idx_next[i : i + 1]
+                    if req.is_done:
+                        scheduler.complete(req)
+            
+            if chunk_size > 0:
+                prefill_req.prefill_cursor += chunk_size
+            
+                if prefill_req.is_fully_prefilled:
+                    prefill_logits = logits[-1:, -1, :]
+                    probs = F.softmax(prefill_logits, dim=-1)
+                    idx_next = torch.multinomial(probs, num_samples=1)
+                    
+                    prefill_req.generated_tokens.append(idx_next.item())
+                    prefill_req._last_token = idx_next
+                    commit_completed_blocks(prefill_req, scheduler.block_cache, BLOCK_SIZE, pool)
+                    scheduler.promote(prefill_req)
+
+            step += 1
+
+    return scheduler                    
+
 ```
 
-### At completion:
+The key changes are the following:
+
+1. We create a single pre-allocated KVBlockPool upfront. The BlockAllocator tracks which physical blocks are free/in-use. This is the core of the paged attention change — memory is now a fixed pool of blocks, not dynamically-allocated per-request tensors.
+
+2. We call `maybe_allocate_block` for each request in `decode_reqs`.
 
 ```python
-def complete(self, req):
-    self.active.remove(req)
-    req.status = "done"
-    # Return blocks to pool
-    self.block_allocator.free_blocks_for_request(req.block_table)
+for req in decode_reqs:
+    maybe_allocate_block(req, scheduler.block_allocator, block_size)
 ```
+
+Before each decode step, every active request checks if its current block is full (num_filled_slots % block_size == 0). If so, a new physical block is allocated and appended to the request's block_table. This is the "grow by one block at a time" pattern — you never over-allocate.
+
+3. We are now calling `assemble_fused_batch` once per step, instead of once per request. 
+
+4. After the forward pass, new KV entries are written back into the physical pool via write_kv_to_pool (mapping logical position → physical block + slot). Previously, you'd just concatenate onto per-request tensors.
+
+5. 
+
+```python
+
+if prefill_req.is_fully_prefilled:
+    ...
+    commit_completed_blocks(prefill_req, scheduler.block_cache, BLOCK_SIZE, pool)
+    scheduler.promote(prefill_req)
+
+```
+
+Once a request finishes prefilling, any fully-filled blocks are hashed and inserted into the global BlockCache. Future requests with the same prompt prefix can skip recomputing those blocks — this is prefix caching.
+
+6. `scheduler.complete(req)` now calls `block_allocator.free_blocks_for_request(req.block_table)`, recycling the physical blocks. With contiguous caches, you just dropped the tensors and let Python's GC handle it. Now it's explicit — the blocks go back to the free list for reuse.
+
 
 ## Tests
 
@@ -511,6 +614,10 @@ def complete(self, req):
 Run the same requests through both the old contiguous-cache `interleaved_generate` and the new paged version with the same random seed. Outputs must be **identical**. This validates that paging didn't change the attention computation.
 
 ### Test 2: Block allocation
+
+This test validates the full lifecycle of physical block management: allocation at admission, growth during decode, and release at completion. It's a critical correctness check because if blocks aren't allocated properly, KV writes will land in uninitialized or already-freed memory. If blocks aren't freed properly, the pool will leak and eventually refuse to admit new requests even when there's plenty of logical capacity.
+
+The test simulates the complete lifecycle by hand — no model forward pass, just the block bookkeeping — which isolates the allocator logic from any attention bugs.
 
 ```python
 
@@ -529,7 +636,7 @@ def test_block_allocation_lifecycle(scheduler):
     req = Request(id=0, prompt_tokens=prompt, max_new_tokens=10)
     
     # 2. Simulate Admission
-    scheduler.waiting.append(req)
+    scheduler.add_request(req)
     scheduler._maybe_admit(step=0)
     
     # Prompt is 12 tokens, block_size=4 -> needs 3 blocks
@@ -563,9 +670,24 @@ def test_block_allocation_lifecycle(scheduler):
     
     print("✅ Test 2: Block allocation lifecycle PASSED")
 
+BLOCK_SIZE = 4
+scheduler = Scheduler(token_budget=16, max_kv_tokens=256, block_size=BLOCK_SIZE)
+scheduler.block_allocator = BlockAllocator(num_blocks=64)
 # Run it
-# test_block_allocation_lifecycle(scheduler)
+test_block_allocation_lifecycle(scheduler)
 ```
+
+The test walks through 5 stages that mirror exactly what happens during a real request's lifetime:
+
+**Stage 1 — Admission allocates blocks for the prompt.** A 12-token prompt with `block_size=4` needs exactly `ceil(12/4) = 3` physical blocks. The assertion checks that `_maybe_admit` correctly computed this and allocated 3 blocks from the pool. It also verifies that `num_filled_slots` is still 0 — the blocks are allocated (reserved) but no KV data has been written yet. This distinction matters: allocation is about reserving space, filling is about writing data.
+
+**Stage 2 — Prefill fills the allocated blocks.** We manually set `num_filled_slots = 12` to simulate a completed prefill. In the real generate loop, `write_kv_to_pool` would have filled these 12 slots across the 3 blocks. No new blocks are needed here because the prompt fits exactly into the 3 blocks that were pre-allocated.
+
+**Stage 3 — Decode triggers a new block allocation.** We simulate 4 decode steps (generating tokens at positions 12, 13, 14, 15). At position 12, `num_filled_slots % block_size == 0` is true (12 % 4 == 0), meaning the last block is full and we need a 4th block. Positions 13, 14, and 15 fit into that new block without triggering another allocation. The assertion confirms we now have exactly 4 blocks and 16 filled slots.
+
+**Stage 4 — Completion returns all blocks to the pool.** When `scheduler.complete(req)` runs, it calls `block_allocator.free_blocks_for_request(req.block_table)`, which returns all 4 physical blocks to the free list. The assertion checks that the free count increased by exactly 4, and that the pool is back to its initial state — no memory leaked.
+
+This test catches the most common paged attention bugs: off-by-one errors in block allocation (allocating too many or too few blocks for a given prompt length), forgetting to allocate new blocks at decode-time boundaries, and failing to free blocks on completion (memory leaks).
 
 ### Test 3: Memory Reuse
 
@@ -581,7 +703,7 @@ def test_memory_reuse(scheduler):
     
     # Request A asks for blocks
     req_a = Request(id=1, prompt_tokens=[10, 20], max_new_tokens=5)
-    scheduler.waiting.append(req_a)
+    scheduler.add_request(req_a)
     scheduler._maybe_admit(step=0)
     
     blocks_used_by_a = set(req_a.block_table)
@@ -591,7 +713,7 @@ def test_memory_reuse(scheduler):
     
     # Request B asks for blocks
     req_b = Request(id=2, prompt_tokens=[30, 40], max_new_tokens=5)
-    scheduler.waiting.append(req_b)
+    scheduler.add_request(req_b)
     scheduler._maybe_admit(step=1)
     
     blocks_used_by_b = set(req_b.block_table)
@@ -604,12 +726,25 @@ def test_memory_reuse(scheduler):
     
     print("✅ Test 3: Memory reuse PASSED")
 
+BLOCK_SIZE = 4
+scheduler = Scheduler(token_budget=16, max_kv_tokens=256, block_size=BLOCK_SIZE)
+scheduler.block_allocator = BlockAllocator(num_blocks=64)
 # Run it
-# test_memory_reuse(scheduler)
+test_memory_reuse(scheduler)
 
 ```
 
+This test proves that freed blocks are genuinely recycled — not just marked as free but actually handed out again to the next request that needs them. This is the whole point of paged attention: unlike contiguous allocation where each request gets a fresh `torch.zeros` call, the paged pool reuses the same physical memory over and over.
+
+The test creates Request A with a 2-token prompt (needing 1 block), completes it (returning that block to the free list), then creates Request B with a different 2-token prompt. The key assertion is `blocks_used_by_a.intersection(blocks_used_by_b)` — it checks that at least one of B's physical blocks was previously owned by A. Since our `BlockAllocator` uses a list with `pop()` and `extend()`, freed blocks go to the end of the free list and get popped off last-in-first-out, so B should receive the exact same block index that A just released.
+
+This test matters for two reasons. First, it validates that `free_blocks_for_request` actually puts blocks back on the free list (not just clearing the request's block table). Second, it confirms that the allocator doesn't have a "use once and discard" bug where freed block indices are lost. In a real system serving thousands of requests, block reuse is what keeps GPU memory utilization stable — without it, you'd exhaust the pool after a few hundred requests even though most of the memory is logically free.
+
 ### Test 4: Pool Exhaustion
+
+Tests 2 and 3 proved that blocks are allocated and recycled correctly. But what happens when the pool is completely full and a new request arrives? The scheduler must **refuse to admit** the request — not crash, not silently overwrite someone else's memory, just hold it in the waiting queue until blocks free up. This is backpressure, and it's how production systems like vLLM prevent out-of-memory crashes under heavy load.
+
+This test uses an artificially tiny pool (only 2 blocks) to force exhaustion with just one request, making the behavior easy to observe.
 
 ```python
 
@@ -627,7 +762,7 @@ def test_pool_exhaustion():
     
     # Request A needs 2 blocks (8 tokens) -> Should admit
     req_a = Request(id=1, prompt_tokens=[1]*8, max_new_tokens=10)
-    tiny_scheduler.waiting.append(req_a)
+    tiny_scheduler.add_request(req_a)
     tiny_scheduler._maybe_admit(step=0)
     
     assert req_a.status == "prefilling", "Request A should have been admitted"
@@ -635,7 +770,7 @@ def test_pool_exhaustion():
     
     # Request B needs 1 block -> Should NOT admit because pool is empty
     req_b = Request(id=2, prompt_tokens=[1]*4, max_new_tokens=10)
-    tiny_scheduler.waiting.append(req_b)
+    tiny_scheduler.add_request(req_b)
     tiny_scheduler._maybe_admit(step=1)
     
     assert req_b.status == "waiting", "Request B should NOT have been admitted (pool full)"
@@ -650,4 +785,19 @@ def test_pool_exhaustion():
     
     print("✅ Test 4: Pool exhaustion and preemption PASSED")
 
+test_pool_exhaustion()
 ```
+
+**Step 1 — Request A fills the entire pool.** Request A has an 8-token prompt, which with `block_size=4` needs exactly 2 blocks — the pool's entire capacity. After admission, `tiny_allocator.num_free == 0` confirms every block is taken. This is the "GPU is full" state.
+
+**Step 2 — Request B is rejected.** Request B arrives with a 4-token prompt (needing 1 block), but there are zero free blocks. The assertion `req_b.status == "waiting"` confirms that `_maybe_admit` correctly checked the allocator's free count and refused to admit B. Crucially, B isn't dropped — it stays in the waiting queue, ready to be retried on a future step.
+
+**Step 3 — Request A completes and frees its blocks.** When `tiny_scheduler.complete(req_a)` runs, A's 2 blocks are returned to the free pool. The assertion verifies the free count is back to 2.
+
+**Step 4 — Request B is admitted on retry.** We call `_maybe_admit` again, and this time it succeeds — B gets it block from the freshly freed pool and transitions to `"prefilling"`. This proves the full recovery cycle: exhaustion → backpressure → release → admission.
+
+This test validates the most important safety property of paged attention: **the system never over-commits physical memory**. Without this check, two requests could be assigned the same physical block, silently corrupting each other's KV caches and producing garbage output. The backpressure mechanism ensures that when GPU memory is full, new requests wait rather than crash — exactly matching vLLM's behavior under memory pressure.
+
+You can find my entire code here:
+
+CZ
