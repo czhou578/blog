@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Adding Speculative Decoding to NanoGPT"
-date: 2026-05-24
+date: 2026-05-26
 ---
 
 In the previous post, I described how to add Page Attention to NanoGPT. Today, we're going to continue along that line of thinking and introduce **speculative decoding** to NanoGPT. 
@@ -451,6 +451,7 @@ def speculative_generate(target_model, draft_model, prompt_tokens, max_new_token
 **Draft, verify, accept/reject, trim.** These four lines are just calls to the functions we've already built. The order is critical: `draft_tokens` proposes K guesses cheaply, `verify_candidates` scores them all in one target forward pass, `accept_reject` decides which to keep using rejection sampling, and `trim_kv_cache` rolls back the KV cache to match the accepted prefix. Each function is stateless and composable — all shared state flows through `past_kvs` and `current_token`.
 
 **Update state for the next iteration.** We append all accepted tokens to `generated` and set `current_token` to the *last* accepted token. This maintains the invariant that `current_token` is always the most recent token *not yet in the KV cache*. In the next iteration, it will be passed into both `draft_tokens` (as the seed for bigram sampling) and `verify_candidates` (as the first element of the verification input). The KV cache at this point contains everything up to but not including `current_token` — exactly what the next verification pass needs.
+
 ## Conclusion
 
 Speculative decoding is one of those rare optimization techniques that feels like magic: it guarantees the exact same output quality as standard autoregressive generation, but can significantly reduce the wall-clock time required to generate it. By breaking the serial bottleneck of the LLM forward pass, we effectively trade cheap, abundant compute (parallel verification) for a reduction in expensive, latency-bound compute (sequential token generation). 
