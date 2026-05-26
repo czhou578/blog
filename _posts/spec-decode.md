@@ -29,6 +29,61 @@ Result: 3 tokens from 1 target forward pass!
 
 It guarantees that the output distribution is **mathematically identical** to the target model alone. Speculative decoding never degrades quality — it only speeds things up (or, in the worst case, matches normal decoding speed).
 
+### The Algorithm at a Glance
+
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                   SPECULATIVE DECODING LOOP                     │
+│                                                                 │
+│   ┌──────────┐     ┌──────────┐     ┌────────────┐     ┌─────┐ │
+│   │  DRAFT   │────▶│  VERIFY  │────▶│   ACCEPT   │────▶│TRIM │ │
+│   │          │     │          │     │  / REJECT   │     │ KV  │ │
+│   │ Bigram   │     │ 1 target │     │             │     │CACHE│ │
+│   │ guesses  │     │ forward  │     │ Rejection   │     │     │ │
+│   │ K tokens │     │ pass for │     │ sampling on │     │Keep │ │
+│   │ (cheap!) │     │ all K at │     │ each draft  │     │only │ │
+│   │          │     │ once     │     │ token       │     │valid│ │
+│   └──────────┘     └──────────┘     └────────────┘     └──┬──┘ │
+│        ▲                                                   │    │
+│        └───────────────────────────────────────────────────┘    │
+│                        repeat until done                        │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### A Worked Example
+
+Let's make this concrete. Say the target model has generated `"To be or not to be, that is the "` and `current_token = "t"`. We speculate with K=4:
+
+```text
+DRAFT (bigram model guesses 4 tokens):
+  "t" → "h" → "e" → " " → "q"
+  candidates = ["h", "e", " ", "q"]
+
+VERIFY (target model scores all 4 in one forward pass):
+  target sees: ["t", "h", "e", " ", "q"]
+  target_probs[0] → P(next | ..."the ") for checking "h"  ← high prob ✓
+  target_probs[1] → P(next | ..."the h") for checking "e" ← high prob ✓
+  target_probs[2] → P(next | ..."the he") for checking " " ← hmm, low prob
+  target_probs[3] → P(next | ..."the he ") for checking "q"
+
+ACCEPT/REJECT (check each candidate left-to-right):
+  "h" → p/q = 0.92/0.31 = 2.97 → min(1, 2.97) = 1.0  → ✅ ACCEPT
+  "e" → p/q = 0.88/0.40 = 2.20 → min(1, 2.20) = 1.0  → ✅ ACCEPT
+  " " → p/q = 0.05/0.35 = 0.14 → rand(0.71) > 0.14   → ❌ REJECT
+        resample from adjusted distribution → "a" (for "heap")
+        STOP — discard remaining candidates
+
+RESULT: accepted = ["h", "e", "a"]
+         3 tokens from 1 target forward pass (instead of 3 forward passes)
+
+TRIM KV CACHE:
+  Cache had entries for ["t", "h", "e", " ", "q"] from verification
+  Keep only ["t", "h", "e"], discard [" ", "q"]
+  "a" becomes the new current_token for the next round
+```
+
+Even with a simple bigram draft model that gets rejected fairly often, we still generated 3 tokens from a single expensive forward pass. On longer sequences with a better draft model, acceptance rates climb and the speedups become dramatic.
+
 Here is what we have so far:
 
 - ✅ `GPTLanguageModel` with stateless `Head.forward()` and KV cache support
@@ -352,9 +407,16 @@ def speculative_generate(target_model, draft_model, prompt_tokens, max_new_token
     return generated[:max_new_tokens]
 ```
 
+**Prefill the prompt.** Before any speculation can happen, we need the target model to process the full prompt and build its KV cache. We feed all `prompt_tokens` as a `(1, T)` tensor with positions `[0, 1, ..., T-1]`. The model returns logits for every position, but we only care about the last one — `logits[0, -1, :]` — which gives us the target model's distribution for the first generated token. We sample from it, append to `generated`, and now have a primed KV cache (`past_kvs`) containing all the prompt's key-value pairs ready for the speculation loop.
+
+**The four-step speculative loop.** Each iteration runs the full draft → verify → accept/reject → trim cycle. The while loop continues until we've generated `max_new_tokens` tokens, with each iteration potentially producing anywhere from 1 token (worst case: first draft token rejected) to K+1 tokens (best case: all drafts accepted plus a bonus token).
+
+**Clamp k to avoid overshooting.** `k = min(K, max_new_tokens - len(generated))` ensures we don't speculate more tokens than we actually need. Without this, the last iteration might generate 5 tokens when we only needed 2 more, and the final `generated[:max_new_tokens]` slice would silently discard work. This is a minor optimization — the slice at the end is the safety net — but it avoids wasting forward pass compute on tokens we'll throw away.
+
+**Draft, verify, accept/reject, trim.** These four lines are just calls to the functions we've already built. The order is critical: `draft_tokens` proposes K guesses cheaply, `verify_candidates` scores them all in one target forward pass, `accept_reject` decides which to keep using rejection sampling, and `trim_kv_cache` rolls back the KV cache to match the accepted prefix. Each function is stateless and composable — all shared state flows through `past_kvs` and `current_token`.
+
+**Update state for the next iteration.** We append all accepted tokens to `generated` and set `current_token` to the *last* accepted token. This maintains the invariant that `current_token` is always the most recent token *not yet in the KV cache*. In the next iteration, it will be passed into both `draft_tokens` (as the seed for bigram sampling) and `verify_candidates` (as the first element of the verification input). The KV cache at this point contains everything up to but not including `current_token` — exactly what the next verification pass needs.
+
 You can find the rest of my code here including the tests I ran to verify correctness: 
 
 Colin Zhou
-
-
-
