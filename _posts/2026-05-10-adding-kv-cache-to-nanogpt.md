@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Adding KV Cache to NanoGPT"
-date: 2026-04-18
+date: 2026-05-10
 ---
 
 NanoGPT is Andrej Karpathy's [from-scratch GPT](https://github.com/karpathy/nanoGPT) trained on Shakespeare — no abstractions, no optimizations, just the bare-minimum transformer you need to generate text. I wanted to understand how inference servers actually work, so I started at the bottom: adding a KV cache to this toy model by hand.
