@@ -139,6 +139,17 @@ The bigram table in our case is basically a free lookup since we aren't doing a 
 
 The draft phase is simple: autoregressively sample K tokens from the bigram model, storing the draft probabilities for each.
 
+```text
+Draft Phase (Sequential Generation):
+[current_token] ──▶ Draft Model ──▶ c0
+                                    │
+                                    ▼
+                                   [c0] ──▶ Draft Model ──▶ c1
+                                                            │
+                                                            ▼
+                                                           [c1] ──▶ Draft Model ──▶ c2
+```
+
 ```python
 def draft_tokens(draft_model, current_token, K):
     """
@@ -166,6 +177,20 @@ In the draft phase, we simply call `draft_model.sample()` K times in a loop. Eac
 ## The Verification Phase — One Target Forward Pass
 
 This is the key insight: **the target model can verify all K candidates in a single forward pass** because of the causal attention structure.
+
+```text
+Verification Phase (Parallel Scoring):
+       [current_token]        [c0]             [c1]             [c2]
+              │                │                │                │
+              ▼                ▼                ▼                ▼
+    ┌──────────────────────────────────────────────────────────────────┐
+    │                    Target Model (1 Forward Pass)                 │
+    └──────────────────────────────────────────────────────────────────┘
+              │                │                │                │
+              ▼                ▼                ▼                ▼
+        target_probs[0]  target_probs[1]  target_probs[2]  target_probs[3]
+        (scores c0)      (scores c1)      (scores c2)      (scores bonus)
+```
 
 You feed the target model the sequence `[current_token, candidate_0, candidate_1, ..., candidate_{K-1}]` as a `(1, K+1)` input. The model produces logits at every position. The logit at position `i` gives the target model's distribution for what should come *after* position `i`.
 
@@ -251,6 +276,16 @@ This lets you check each candidate against what the target model actually wanted
 ## The Accept/Reject Phase — Rejection Sampling
 
 This is the mathematically precise part. For each draft token, you decide whether to accept it based on how well the draft model's prediction matches the target model's prediction.
+
+```text
+Acceptance Math (p = target_prob, q = draft_prob):
+
+Scenario A: Target likes token MORE than Draft did (p > q)
+  p = 0.8, q = 0.4  ──▶  p/q = 2.0  ──▶  min(1, 2.0) = 1.0  ──▶  100% Accept
+
+Scenario B: Target likes token LESS than Draft did (p < q)
+  p = 0.2, q = 0.8  ──▶  p/q = 0.25 ──▶  min(1, 0.25) = 0.25 ──▶  25% Accept, 75% Reject
+```
 
 ```python
 def accept_reject(candidates, draft_probs, target_probs):
@@ -416,7 +451,12 @@ def speculative_generate(target_model, draft_model, prompt_tokens, max_new_token
 **Draft, verify, accept/reject, trim.** These four lines are just calls to the functions we've already built. The order is critical: `draft_tokens` proposes K guesses cheaply, `verify_candidates` scores them all in one target forward pass, `accept_reject` decides which to keep using rejection sampling, and `trim_kv_cache` rolls back the KV cache to match the accepted prefix. Each function is stateless and composable — all shared state flows through `past_kvs` and `current_token`.
 
 **Update state for the next iteration.** We append all accepted tokens to `generated` and set `current_token` to the *last* accepted token. This maintains the invariant that `current_token` is always the most recent token *not yet in the KV cache*. In the next iteration, it will be passed into both `draft_tokens` (as the seed for bigram sampling) and `verify_candidates` (as the first element of the verification input). The KV cache at this point contains everything up to but not including `current_token` — exactly what the next verification pass needs.
+## Conclusion
 
-You can find the rest of my code here including the tests I ran to verify correctness: 
+Speculative decoding is one of those rare optimization techniques that feels like magic: it guarantees the exact same output quality as standard autoregressive generation, but can significantly reduce the wall-clock time required to generate it. By breaking the serial bottleneck of the LLM forward pass, we effectively trade cheap, abundant compute (parallel verification) for a reduction in expensive, latency-bound compute (sequential token generation). 
+
+While our simple bigram draft model on a 210k parameter NanoGPT is more of an educational toy, the core principles we just implemented are identical to what runs in production. Modern inference engines like vLLM and TensorRT-LLM rely heavily on speculative decoding—usually using smaller, specialized transformer models as drafters—to serve massive models efficiently at scale. 
+
+If you want to see the complete implementation, including the greedy equivalence tests that prove the math works perfectly, you can find the rest of the code here: 
 
 Colin Zhou
