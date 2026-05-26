@@ -4,7 +4,7 @@ title: "Adding Speculative Decoding to NanoGPT"
 date: 2026-05-26
 ---
 
-In the previous post, I described how to add Page Attention to NanoGPT. Today, we're going to continue along that line of thinking and introduce **speculative decoding** to NanoGPT. 
+In the previous post about [Paged Attention](/blog/2026/05/24/paged-att), we discussed how to speed up inference by caching KV blocks. However, we are still bottlenecked by the number of serial forward passes. Today, we're going to continue along that line of thinking and introduce **speculative decoding** to NanoGPT. 
 
 ## Problem
 
@@ -458,6 +458,6 @@ Speculative decoding is one of those rare optimization techniques that feels lik
 
 While our simple bigram draft model on a 210k parameter NanoGPT is more of an educational toy, the core principles we just implemented are identical to what runs in production. Modern inference engines like vLLM and TensorRT-LLM rely heavily on speculative decoding—usually using smaller, specialized transformer models as drafters—to serve massive models efficiently at scale. 
 
-If you want to see the complete implementation, including the greedy equivalence tests that prove the math works perfectly, you can find the rest of the code here: 
+If you want to see the complete implementation, including the greedy equivalence tests that prove the math works perfectly, you can find the rest of the code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-speculative-decoding.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-speculative-decoding.ipynb)
 
 Colin Zhou
