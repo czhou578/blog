@@ -73,7 +73,7 @@ class Head(nn.Module):
 
 ```
 
-The inference branch is the interesting one. When a new token arrives, we project it to get `k` and `v` of shape `(B, 1, hs)` and concatenate them onto the existing cache. Now the cache has shape `(B, T_so_far, hs)`. The query — also `(B, 1, hs)` — attends over the full cache: `Q @ K^T` gives `(B, 1, T_so_far)` attention weights, and the weighted sum over V gives `(B, 1, hs)`. One row in, one row out. The training branch is unchanged — full-sequence attention with the causal mask, exactly as Karpathy wrote it.
+The inference branch is the interesting one. When a new token arrives, we project it to get `k` and `v` of shape `(B, 1, hs)` and concatenate them onto the existing cache. Now the cache has shape `(B, T_so_far, hs)`. The query — also `(B, 1, hs)` — attends over the full cache: `Q @ K^T` gives `(B, 1, T_so_far)` attention weights, and the weighted sum over V gives `(B, 1, hs)`. One row in, one row out. The training branch is unchanged. 
 
 The `if self.key_cache is not None` check handles the first step: when the cache is empty (the very first forward pass), we initialize it directly instead of trying to concatenate onto `None`.
 
@@ -140,7 +140,7 @@ Now, we run `model(idx)` once since that is how we prefill the KV cache before t
 
 ## Positional encoding
 
-There's a subtlety here that tripped me up. A transformer has no inherent sense of order — "A cat is big" and "A big is cat" would produce the same embeddings without position information. NanoGPT uses a learned position embedding table: during the forward pass, the position index looks up a vector from the table, and that vector gets added to the token embedding.
+A transformer has no inherent sense of order — "A cat is big" and "A big is cat" would produce the same embeddings without position information. NanoGPT uses a learned position embedding table: during the forward pass, the position index looks up a vector from the table, and that vector gets added to the token embedding.
 
 During full-sequence training, this is straightforward: if the sequence has 17 tokens, you look up positions 0 through 16. But with the KV cache, we're feeding one token at a time. If we don't pass the correct position, the model treats every token as position 0.
 
@@ -164,31 +164,6 @@ idx = [[15, 23, 6, 18, 14, 5, 12, 0, 3, 42, 10, 19]]   # shape (1, 12)
 ```
 
 `idx.shape[1]` always gives us exactly the right position index for the next token.
-
-## Verification
-
-The most important check: if the KV cache is mathematically correct, it should produce the exact same tokens as the no-cache version given the same random seed and prompt. The cache is an optimization, not an approximation — it shouldn't change the output at all.
-
-```python
-torch.manual_seed(42)
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-
-# Run without cache
-out_no_cache = generate_no_cache(model, context.clone(), max_new_tokens=20)
-
-# Run with cache (same seed, same prompt)
-torch.manual_seed(42)
-out_with_cache = generate_with_cache(model, context.clone(), max_new_tokens=20)
-
-# Check token-by-token equality
-assert torch.equal(out_no_cache, out_with_cache), \
-    f"MISMATCH!\nNo cache:   {out_no_cache}\nWith cache: {out_with_cache}"
-
-print("✓ Cache output matches no-cache output exactly!")
-print(decode(out_with_cache[0].tolist()))
-```
-
-This seeds the RNG, runs the same prompt through both paths, and asserts that every token matches. If even one differs, the cache logic has a bug.
 
 ## Shape walkthrough
 
