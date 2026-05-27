@@ -11,7 +11,7 @@ date: 2026-05-13
 
 In the [previous post](/blog/2026/05/11/adding-continuous-batching), we built a continuous batching scheduler for NanoGPT. Requests can now arrive and leave the decode batch independently — the GPU stays busy, and no request waits for anyone else to finish. But there's still a problem hiding in the prefill step.
 
-When a new request arrives, we run its entire prompt through the model in one shot. For a 9-token Shakespeare prompt, this is fine. But what if the prompt is 2,000 tokens? Or 8,000? That single prefill forward pass monopolizes the GPU for the entire duration, and every request currently decoding has to wait. Their users stare at a frozen cursor. In production, this is called **prefill starvation**, and it's one of the main reasons inference servers implement chunked prefill.
+When a new request arrives, we run its entire prompt through the model in one shot. For a 9-token Shakespeare prompt, this is fine. But what if the prompt is 2,000 tokens? Or 8,000? That single prefill forward pass **monopolizes** the GPU for the entire duration, and every request currently decoding has to wait. Their users stare at a frozen cursor. In production, this is called **prefill starvation**, and it's one of the main reasons inference servers implement chunked prefill.
 
 The fix is conceptually simple: instead of processing the whole prompt at once, break it into smaller chunks and interleave them with decode steps. Each scheduler iteration processes one chunk of the prefill *and* one decode step for everyone already active. The prompt still gets fully processed — it just takes a few more iterations, and nobody else gets starved in the meantime.
 
@@ -22,7 +22,7 @@ The key mechanism is a **token budget**: a cap on how many tokens the scheduler 
 - **Decode tokens** — 1 token per active request. These are cheap and high priority. A user is watching.
 - **Prefill tokens** — whatever's left of the budget goes to the next chunk of a partially-prefilled request.
 
-If we have 3 active decode requests and a token budget of 10, that leaves 7 tokens of budget for prefill work. A 20-token prompt would get processed as three chunks: 7 + 7 + 6. The decode requests never skip a beat.
+If we have 3 active decode requests and a token budget of 10, that leaves 7 tokens of budget for prefill work. A 20-token prompt would get processed as three chunks: 7 + 7 + 6. 
 
 ## Tracking partial prefill
 
@@ -49,30 +49,13 @@ class Request:
     )
 
     @property
-    def tokens_so_far(self) -> List[int]:
-        """Full sequence: prompt + everything generated."""
-        return self.prompt_tokens + self.generated_tokens
-
-    @property
-    def num_generated(self) -> int:
-        return len(self.generated_tokens)
-
-    @property
-    def is_done(self) -> bool:
-        return self.num_generated >= self.max_new_tokens
-    
-    @property
     def is_fully_prefilled(self) -> bool:
         return self.prefill_cursor == len(self.prompt_tokens)
 
-    def clear_cache(self):
-        self.kv_cache.clear()
+    ...
 ```
 
-We add in prefill_cursor which is just the index for how many prompt tokens have already been processed. A request is fully prefilled when  `prefill_cursor == len(prompt_tokens)`. 
-
 We also add a new property called `is_fully_prefilled` which returns `True` if the request is fully prefilled, and `False` otherwise.
-
 
 ## Continuous Batching Loop
 
@@ -84,13 +67,11 @@ For every outer while loop iteration, we want to calculate the remaining budget 
 
 If we have a remaining budget, then we take the first prefilling request, and prefill it for one step. 
 
-We use the prefill_cursor property on that particular request and the remaining available token budget to determine how many tokens to prefill in this step. These two parameters serve as our slicing indexes for the prompt tokens. 
+We use the `prefill_cursor` property on that particular request and the remaining available token budget to determine how many tokens to prefill in this step. These two parameters serve as our slicing indexes for the prompt tokens. 
 
 After we slice the prompt tokens, we have to remember to update the prefill_cursor property on that particular request by adding the number of tokens we just prefilled. 
 
-If we don't have enough budget to prefill the entire request or we don't have any more active (decode) requests, then we continue to the next loop. 
-
-Otherwise, we grab the positional embeddings by using the `torch.arange` function. 
+If we don't have enough budget to prefill the entire request or we don't have any more active (decode) requests, then we continue to the next loop. Otherwise, we grab the positional embeddings by using the `torch.arange` function. 
 
 Then, we add the previous KV cache to an array (refer to my KV Cache implementation article for more details on this) and then run the model forward pass to get the new logits and KV cache. We grab the logits and then get the next token index by using the `torch.multinomial` function. 
 
@@ -99,10 +80,6 @@ We store the new KV cache on the request object, and then we check if the reques
 The rest of the decode logic is exactly the same, since we are doing chunked prefill optimizations after all!
 
 If we don't have any more active requests, then we increment the step, which is equivalent to moving on to the next decode step. 
-
-That's it!
-
-Here is the code for the entire continuous function:
 
 ```python
 def continuous_batching_generate(model, request_queue, max_batch_size=4, token_budget=None):
