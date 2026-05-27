@@ -12,9 +12,11 @@ The problem is straightforward: without batching, the GPU sits mostly idle. One 
 
 ## Moving the KV cache out of the model
 
-The current `generate_with_cache` function has the KV cache baked into the `Head` class as a single tensor for the whole batch. That worked fine for one request, but now we need multiple requests with different sequence lengths sharing the same forward pass. The cache has to move out of the model and into each request.
+The current `generate_with_cache` function has the KV cache baked into the `Head` class as a single tensor for the whole batch. That worked fine for one request, but now we need multiple requests with different sequence lengths sharing the same forward pass. **The cache has to move out of the model and into each request.**
 
-Each request carries the state it needs: the original prompt tokens, how many tokens it still wants to generate, and the tokens produced so far. The `status` field tracks its lifecycle — `"waiting"` means it hasn't been prefilled yet, `"active"` means it's in the decode batch, and `"done"` means it's finished. Most importantly, each request owns its own KV cache: a dictionary keyed by `(layer_idx, head_idx)` holding the cached key and value tensors for that request's history. This is the key architectural change — the cache moves from inside the model to inside the request.
+Each request carries the state it needs: the original prompt tokens, how many tokens it still wants to generate, and the tokens produced so far. The `status` field tracks its lifecycle — `"waiting"` means it hasn't been prefilled yet, `"active"` means it's in the decode batch, and `"done"` means it's finished. 
+
+Each request owns its own KV cache: a dictionary keyed by `(layer_idx, head_idx)` holding the cached key and value tensors for that request's history.
 
 ```python
 
@@ -185,7 +187,9 @@ def assemble_batch_cache(requests):
 
 ```
 
-We want to access the KV cache of every layer and head for every request. Then, we want to pad the left side with zeroes using `torch.zeros`. Then, we iterate over every layer and head, and for each layer and head, we iterate over every request and append the key and value tensors to the `keys` and `values` lists. Finally, we concatenate the `keys` and `values` lists to get the batched KV cache. The values that we return are the batched KV cache, the attention mask, and the pad lengths. The attention mask will be passed into the model as we will see later, and the pad_lengths will be used to disassemble the batch cache, which will be in the next section. 
+We want to access the KV cache of every layer and head for every request. Then, we want to pad the left side with zeroes using `torch.zeros`. Then, we iterate over every layer and head, and for each layer and head, we iterate over every request and append the key and value tensors to the `keys` and `values` lists. 
+
+Finally, we concatenate the `keys` and `values` lists to get the batched KV cache. The values that we return are the batched KV cache, the attention mask, and the pad lengths. The attention mask will be passed into the model as we will see later, and the pad_lengths will be used to disassemble the batch cache, which will be in the next section. 
 
 ## Unpacking after the forward pass
 
@@ -229,7 +233,7 @@ while there are active requests OR the waiting queue is non-empty:
     6. Go to 1
 ```
 
-The key insight: steps 1 and 5 happen every iteration, not just at the start and end. Requests flow in and out continuously.
+**The key insight**: steps 1 and 5 happen every iteration, not just at the start and end. Requests flow in and out continuously.
 
 The function takes three arguments: the trained model, a `request_queue` of `(arrival_step, Request)` pairs sorted by arrival time, and a `max_batch_size` cap. It returns the list of completed requests.
 
@@ -325,36 +329,13 @@ Let's walk through each piece:
 
 **Forward pass.** The model sees all active requests simultaneously — it doesn't know or care that they are independent sequences at different stages of generation. It returns logits for every request and updated KV caches that now include the new token's key and value.
 
-**Model forward pass.** This is the same as before. We pass the batch_tokens, batch_positions, past_kvs, and attn_mask to the model, and get the logits, loss, and new_kvs. We will then take the new kv cache from the model and store it in the request's kv cache using the disassemble_batch_cache function. In addition, we have to add the token's that were newly generated for the active requests to the request's generated tokens list.
+**Model forward pass.** This is the same as before. We pass the batch_tokens, batch_positions, past_kvs, and attn_mask to the model, and get the logits, loss, and new_kvs. We will then take the new kv cache from the model and store it in the request's kv cache using the `disassemble_batch_cache` function. In addition, we have to add the token's that were newly generated for the active requests to the request's generated tokens list.
 
 **Completed requests.** Finally, we check if any of the requests in the active requests list are done. If they are, we remove them from the active requests list and add them to the completed requests list, and then we increment the time step.
 
 ## Training
 
 The training loop is the same as the previous post — nothing about continuous batching changes the training procedure. The model is identical; only the inference-time serving logic is different.
-
-```python
-model = GPTLanguageModel()
-m = model.to(device)
-print(sum(p.numel() for p in m.parameters())/1e6, 'M parameters')
-
-optimizer = torch.optim.AdamW(model.parameters(), lr=learning_rate)
-
-for iter in range(max_iters):
-    if iter % eval_interval == 0 or iter == max_iters - 1:
-        losses = estimate_loss()
-        print(f"step {iter}: train loss {losses['train']:.4f}, val loss {losses['val']:.4f}")
-
-    xb, yb = get_batch('train')
-    logits, loss, _ = model(xb, yb)  # _ discards the cache during training
-    optimizer.zero_grad(set_to_none=True)
-    loss.backward()
-    optimizer.step()
-
-# Quick sanity check with the original no-cache generate
-context = torch.zeros((1, 1), dtype=torch.long, device=device)
-print(decode(m.generate(context, max_new_tokens=200)[0].tolist()))
-```
 
 The loss goes from ~4.2 (random) down to ~1.65 over 5,000 steps. The model learns Shakespeare's character-level patterns — not well enough to fool anyone, but well enough to test our batching logic:
 
@@ -371,35 +352,7 @@ step 700: train loss 2.1326, val loss 2.1583
 step 800: train loss 2.0932, val loss 2.1352
 step 900: train loss 2.0499, val loss 2.0987
 step 1000: train loss 2.0349, val loss 2.0819
-step 1100: train loss 1.9994, val loss 2.0706
-step 1200: train loss 1.9857, val loss 2.0726
-step 1300: train loss 1.9638, val loss 2.0401
-step 1400: train loss 1.9386, val loss 2.0296
-step 1500: train loss 1.9028, val loss 1.9947
-step 1600: train loss 1.8821, val loss 1.9914
-step 1700: train loss 1.8785, val loss 1.9813
-step 1800: train loss 1.8746, val loss 1.9878
-step 1900: train loss 1.8451, val loss 1.9599
-step 2000: train loss 1.8294, val loss 1.9525
-step 2100: train loss 1.8333, val loss 1.9716
-step 2200: train loss 1.8067, val loss 1.9342
-step 2300: train loss 1.8009, val loss 1.9301
-step 2400: train loss 1.7751, val loss 1.9097
-step 2500: train loss 1.7753, val loss 1.9112
-step 2600: train loss 1.7572, val loss 1.8935
-step 2700: train loss 1.7596, val loss 1.9044
-step 2800: train loss 1.7485, val loss 1.8818
-step 2900: train loss 1.7349, val loss 1.8797
-step 3000: train loss 1.7420, val loss 1.8873
-step 3100: train loss 1.7331, val loss 1.8899
-step 3200: train loss 1.7262, val loss 1.8832
-step 3300: train loss 1.7109, val loss 1.8544
-step 3400: train loss 1.7205, val loss 1.8765
-step 3500: train loss 1.7111, val loss 1.8623
-step 3600: train loss 1.7134, val loss 1.8649
-step 3700: train loss 1.6996, val loss 1.8583
-step 3800: train loss 1.6962, val loss 1.8547
-step 3900: train loss 1.6856, val loss 1.8406
+...
 step 4000: train loss 1.6803, val loss 1.8274
 ...
 
@@ -412,7 +365,9 @@ Whines is eye, hain latise, drovets, and Will
 
 ## Testing
 
-Now we simulate three requests arriving at different times with different prompt lengths. If the scheduler is correct, requests 0 and 1 start together at step 0, request 2 joins later at step 3, and they all finish independently:
+To prove our continuous batching implementation actually works, we need to test its ability to handle completely unsynchronized request lifecycles. We simulate three requests arriving at different times with different prompt lengths and different target generation lengths. The test pushes this queue through the `continuous_batching_generate` function and then strictly verifies that each completed request has the correct number of generated tokens and the exact expected KV cache shape. 
+
+If the scheduler is correct, requests 0 and 1 start together at step 0, request 2 joins later at step 3, and they all finish independently:
 
 ```python
 
@@ -480,7 +435,9 @@ She thout to He
 ✓ All requests completed with correct cache shapes!
 ```
 
-Request 0 finishes first at step 15, request 2 (which arrived late at step 3) finishes at step 16, and request 1 — which wanted the most tokens — finishes last at step 20. The batch size shrinks as requests complete. This is exactly the behavior we want.
+Request 0 finishes first at step 15, request 2 (which arrived late at step 3) finishes at step 16, and request 1 — which wanted the most tokens — finishes last at step 20. The batch size dynamically expands as new requests join mid-flight and shrinks as requests complete without disrupting the active decode loop. This is exactly the behavior we want.
+
+The significance of these results lies in the passing assertions at the end. Despite the staggered arrivals, the differing prompt lengths, and the constant left-padding and unpacking occurring in every single forward pass, each request finishes with a perfectly sized, uncorrupted KV cache. This proves our continuous batching logic successfully isolates each request's state while still processing them efficiently in parallel on the GPU.
 
 ## Odds and ends
 
