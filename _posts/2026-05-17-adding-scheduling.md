@@ -79,45 +79,47 @@ Here is the `schedule` function:
 
 ```
 
+The schedule function calls two helper methods that each determine whether a request should be admitted or preempted. It also sets the arrival time for admitted requests. Lastly, it determines which request to serve next, and which requests are currently being decoded. 
+
+The returned `prefill_req` and `decode_reqs` are then passed into the main `generate` loop, where the prefill request is processed using the chunked prefill logic from our previous post, and the decoded requests are processed using the decode loop. 
+
 And here are the two helper methods that do the heavy lifting:
 
 ```python
-    def _maybe_admit(self, step):
-        if self.prefilling:
+    def maybe_admit(self, step):
+        if self.prefilling or not self.waiting:
             return
         
-        if not self.waiting:
-            return
-
-        kv_used = sum(len(req.prompt_tokens) + req.num_generated for req in self.active + self.prefilling)
-
-        _, _, _, candidate = self.waiting[0]
-        candidate_kv = len(candidate.prompt_tokens)
-
-        if kv_used + candidate_kv > self.max_kv_tokens:
+        if len(self.active) >= self.max_batch_size:
             return
         
-        if len(self.active) + len(self.prefilling) >= self.max_batch_size: return
+        candidate = self.waiting[0][-1]
+        kv_tokens_used = sum(len(req.prompt_tokens) + req.num_generated for req in self.active)
 
+        if kv_tokens_used + len(candidate.prompt_tokens) > self.max_kv_tokens:
+            return
+        
         heapq.heappop(self.waiting)
         candidate.arrival_time = step
         candidate.status = "prefilling"
         self.prefilling.append(candidate)
     
-    def _maybe_preempt(self):
-        kv_used = sum(len(req.prompt_tokens) + req.num_generated for req in self.active + self.prefilling)
+    def maybe_preempt(self):
+        kv_tokens_used = sum(len(req.prompt_tokens) + req.num_generated for req in self.active)
 
-        while self.active and kv_used > self.max_kv_tokens:
+        while self.active and kv_tokens_used > self.max_kv_tokens:
             victim = max(self.active, key=lambda r: (r.priority, -r.arrival_time))
+            kv_tokens_used -= (len(victim.prompt_tokens) + victim.num_generated)
+            
             self.active.remove(victim)
             victim.clear_cache()
+            victim.generated_tokens.clear()
             victim.prefill_cursor = 0
             victim.status = "waiting"
             self.preempted.append(victim)
-
-            key = self._sort_key(victim)
-            heapq.heappush(self.waiting, (*key, victim.id, victim))
-            kv_used = sum(len(req.prompt_tokens) + req.num_generated for req in self.active + self.prefilling)
+            
+            key = self.sort_key(victim)
+            heapq.heappush(self.waiting, (key, victim))
 ```
 
 `_maybe_admit` is the gatekeeper: it decides whether a new request can enter the system. It peeks at the highest-priority candidate in the waiting heap and checks two constraints before letting it through — first, whether the total KV memory currently consumed by active and prefilling requests, plus the candidate's full prompt length, would exceed `max_kv_tokens`, and second, whether the batch is already at capacity. If either constraint fails, the candidate stays in the heap and we try again next step. Notice the early return when `self.prefilling` is non-empty — we only allow one request to be mid-prefill at a time (matching our chunked prefill design), so a new request can't be admitted until the current one finishes prefilling and graduates to active.
@@ -322,8 +324,6 @@ If there is a prefill request, we prefill it for one step. This logic is the exa
 If there are decode requests, we decode them for one step. This logic is also the exact same compared to the previous post. 
 
 Finally, we check if any requests are done and remove them from the scheduler. This is a change from the chunked prefill implementation, where instead of manually keeping track of a still active requests list, we simply let the scheduler handle it for us (by calling the `scheduler.complete()` method).
-
-* For a more detailed explanation of the prefill and decode logic, refer to my previous posts here. 
 
 ## Tests
 
