@@ -693,10 +693,6 @@ During assembly, we deliberately placed all decode requests at the *beginning* o
 
 If we processed a prefill chunk and it reached the end of its prompt (`is_fully_prefilled`), we need to generate its first output token. Because the prefill request was placed at the *end* of the batch tensor during assembly, its logits are simply the very last row (`logits[-1:]`). We sample from it, update the state, and promote the request to active decoding for the next step!
 
-# Gotchas
-
-Here are a couple of things worth pointing out:
-
 ## Gotchas
 
 1. **KV cache shape mismatch during assembly.** Decode requests have `T_past_i` tokens in their cache. The prefill request may have `T_past_prefill` tokens (from earlier chunks) or 0 tokens (first chunk). `assemble_batch_cache`'s padding needs to handle this varying `T_past` across rows.
