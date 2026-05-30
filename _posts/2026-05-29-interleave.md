@@ -705,7 +705,7 @@ If we processed a prefill chunk and it reached the end of its prompt (`is_fully_
 
 5. **Empty decode batch.** When there are no active decode requests (only a prefilling request), the batch is just the prefill chunk. This degenerates to a standard prefill call. Make sure your code handles `len(decode_reqs) == 0` gracefully.
 
-The full code can be found here:
+The full code can be found here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-interleaving.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-interleaving.py)
 
 Thanks for reading!
 
