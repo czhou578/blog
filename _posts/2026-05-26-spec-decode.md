@@ -19,7 +19,7 @@ N tokens = N forward passes
 ```
 
 **Speculative decoding** breaks this by using a cheap **draft model** to guess K tokens ahead, then **verifying** all K guesses in a single forward pass of the real (target) model. If the guesses are good, you get K+1 tokens for the cost of ~1 target forward pass.
-=
+
 ```
 Draft:  guess token_1, token_2, token_3, token_4  (cheap, ~free)
 Verify: forward([token_0, token_1, token_2, token_3, token_4]) → check all at once
