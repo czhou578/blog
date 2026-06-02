@@ -10,8 +10,6 @@ The goal is to benchmark three serving optimizations: KV caching, continuous bat
 
 ## Setup
 
-The benchmark harness uses a `BenchmarkConfig` class to hold the configuration for each run.
-
 I also reduced the NanoGPT hyperparameters to keep iteration fast on an Intel CPU. The generated text does not need to be coherent for these tests, because the benchmark is measuring how long it takes to generate tokens.
 
 For the rest of this series, I will ignore output quality and focus on the performance behavior of the inference optimizations.
