@@ -54,6 +54,8 @@ The scheduler does not make the transformer faster. It changes the answer to a p
 
 ### Scheduling Results
 
+![Scheduling Benchmark](/images/scheduling_benchmark.png)
+
 | Case                         | FCFS Tok/s | Priority Tok/s | Throughput Ratio | FCFS High-Priority Latency | Priority High-Priority Latency | High-Priority Latency Ratio | Preemptions |
 | ---------------------------- | ---------: | -------------: | ---------------: | -------------------------: | -----------------------------: | --------------------------: | ----------: |
 | `priority_inversion_serial`  |      83.04 |          79.77 |            0.96x |                  308.77 ms |                      112.88 ms |                       0.37x |           1 |
@@ -259,6 +261,8 @@ In this implementation, the cache is block-based and content-addressed. With `pr
 
 ### Prefix Cache Results
 
+![Prefix Caching Benchmark](/images/prefix_caching_benchmark.png)
+
 | Case                       | Requests | Prompt Tokens | Cached Tokens | Actual Prefill | Prefill Reduction | Hit Rate | Throughput Ratio | Evictions |
 | -------------------------- | -------: | ------------: | ------------: | -------------: | ----------------: | -------: | ---------------: | --------: |
 | `shared_prefix_basic`      |        8 |           192 |           112 |             80 |             58.3% |    77.8% |            0.95x |         0 |
@@ -335,6 +339,8 @@ Each shared prefix needs four blocks. Six groups need far more blocks than the c
 So the cache also has to be large enough to keep hot prefixes resident. Otherwise it becomes a very elaborate way to do extra bookkeeping.
 
 ## Interleaving: The Shape Of The Full Loop
+
+![Interleaving Benchmark](/images/interleaving_benchmark.png)
 
 Scheduling, batching, and prefix caching all point toward the same serving loop.
 
