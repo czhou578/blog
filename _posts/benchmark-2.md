@@ -17,7 +17,6 @@ That is the organizing question for this second benchmark post. Here I added a f
 The headline is not "everything got faster." The more interesting result is that each feature changes a different part of the serving problem:
 
 - **Scheduling** decides who gets served first.
-- **Continuous batching** shares one decode step across many requests.
 - **Prefix caching** avoids repeating prompt work that the server has already done.
 - **Interleaving** is the glue that lets prefill and decode compete for the same token budget.
 
@@ -266,23 +265,10 @@ The important part is not the pseudocode. It is the pressure it represents. Pref
 This is why the earlier sections belong together:
 
 - Priority scheduling decides which waiting requests deserve admission.
-- Continuous batching makes active decode efficient.
 - Prefix caching reduces the amount of prefill work needed for repeated prompts.
 - Interleaving decides how decode and prefill share the next forward pass.
 
 The tiny NanoGPT server is starting to look like a real serving engine because the model call is no longer the whole story. The interesting behavior is now in the queue.
-
-## What I Would Fix Next
-
-The benchmark surfaced a few implementation issues that are worth fixing before treating the numbers as final.
-
-First, the continuous batching admission bug needs to be fixed so the batched path completes the same workload as the sequential baseline. Until then, the batching results are useful for mechanism inspection, but not for rigorous end-to-end comparison.
-
-Second, the prefix cache needs a more efficient KV layout. At this scale, cloning, slicing, and concatenating KV tensors dominate the saved prefill compute. A production implementation would avoid much of that movement.
-
-Third, the interleaving benchmark should report its own metrics directly: decode latency, TTFT, token budget utilization, prefill chunk utilization, and how often decode was delayed by prefill.
-
-Finally, the model and prompts should be scaled up. Many serving optimizations only become obvious once model compute is expensive enough for saved work to matter.
 
 ## Takeaways
 
@@ -290,12 +276,10 @@ The most useful lesson from this round is that serving optimizations have differ
 
 Priority scheduling did not make the model faster. It made important requests wait less. In the best case, high-priority latency dropped from **308.77 ms** to **112.88 ms**. Under memory pressure, that same idea cost throughput because preempted requests had to recompute.
 
-Continuous batching increased generated-token throughput by sharing decode forward passes. In the batch-size sweep, throughput rose from **0.68x** at `max_batch_size=1` to **5.99x** at `max_batch_size=16`. But TTFT and average latency got worse, especially when prefill was heavier.
-
 Prefix caching avoided repeated prompt work. In the strongest reuse case, actual prefill fell by **82.1%**. But the tiny implementation was still slower wall-clock because cache overhead dominated the saved compute.
 
 So the practical mental model is:
 
-> KV caching remembers one request. Prefix caching remembers shared prompts. Batching shares decode work. Scheduling decides who gets access. Interleaving decides how prefill and decode coexist.
+> KV caching remembers one request. Prefix caching remembers shared prompts. Scheduling decides who gets access. Interleaving decides how prefill and decode coexist.
 
 That is the next layer of LLM inference after "just run the model." The forward pass is still the expensive primitive, but the serving engine around it decides whether that primitive is spent wisely.
