@@ -45,29 +45,29 @@ A scheduler asks a better question: should the urgent request jump the line?
 
 In this benchmark, I compared two policies:
 
-| Policy | Behavior |
-|---|---|
-| `FCFS` | Serve requests in arrival order. |
+| Policy     | Behavior                                                                                      |
+| ---------- | --------------------------------------------------------------------------------------------- |
+| `FCFS`     | Serve requests in arrival order.                                                              |
 | `priority` | Serve lower priority-number requests first. If necessary, preempt lower-priority active work. |
 
 The scheduler does not make the transformer faster. It changes the answer to a policy question: when there is room for only one more request, whose token do we buy next?
 
 ### Scheduling Results
 
-| Case | FCFS Tok/s | Priority Tok/s | Throughput Ratio | FCFS High-Priority Latency | Priority High-Priority Latency | High-Priority Latency Ratio | Preemptions |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| `priority_inversion_serial` | 83.04 | 79.77 | 0.96x | 308.77 ms | 112.88 ms | 0.37x | 1 |
-| `priority_mix_small_batch` | 166.15 | 169.10 | 1.02x | 235.69 ms | 108.55 ms | 0.46x | 0 |
-| `memory_pressure_preemption` | 127.67 | 119.76 | 0.94x | 183.62 ms | 120.07 ms | 0.65x | 2 |
-| `equal_priority_control` | 165.27 | 165.35 | 1.00x | 210.86 ms | 210.66 ms | 1.00x | 0 |
+| Case                         | FCFS Tok/s | Priority Tok/s | Throughput Ratio | FCFS High-Priority Latency | Priority High-Priority Latency | High-Priority Latency Ratio | Preemptions |
+| ---------------------------- | ---------: | -------------: | ---------------: | -------------------------: | -----------------------------: | --------------------------: | ----------: |
+| `priority_inversion_serial`  |      83.04 |          79.77 |            0.96x |                  308.77 ms |                      112.88 ms |                       0.37x |           1 |
+| `priority_mix_small_batch`   |     166.15 |         169.10 |            1.02x |                  235.69 ms |                      108.55 ms |                       0.46x |           0 |
+| `memory_pressure_preemption` |     127.67 |         119.76 |            0.94x |                  183.62 ms |                      120.07 ms |                       0.65x |           2 |
+| `equal_priority_control`     |     165.27 |         165.35 |            1.00x |                  210.86 ms |                      210.66 ms |                       1.00x |           0 |
 
 The important column is high-priority latency. In every workload where priorities actually differ, the priority scheduler helps the requests we care about:
 
-| Case | High-Priority Latency Improvement |
-|---|---:|
-| `priority_inversion_serial` | 63.4% lower |
-| `priority_mix_small_batch` | 53.9% lower |
-| `memory_pressure_preemption` | 34.6% lower |
+| Case                         | High-Priority Latency Improvement |
+| ---------------------------- | --------------------------------: |
+| `priority_inversion_serial`  |                       63.4% lower |
+| `priority_mix_small_batch`   |                       53.9% lower |
+| `memory_pressure_preemption` |                       34.6% lower |
 
 The control case matters too. When all requests have equal priority, FCFS and priority scheduling produce effectively identical results. That is exactly what should happen: if priority carries no information, the priority key falls back to arrival order.
 
@@ -84,14 +84,14 @@ max_kv_tokens=40
 
 With `max_batch_size=1`, only one request can be active at a time. FCFS lets the early lower-priority request occupy the engine. Priority scheduling performs one preemption and lets the high-priority request move ahead.
 
-| Metric | FCFS | Priority | Reading |
-|---|---:|---:|---|
-| Throughput | 83.04 tok/s | 79.77 tok/s | Priority is slightly slower. |
-| Avg TTFT | 199.97 ms | 130.38 ms | First-token responsiveness improves. |
-| Avg latency | 323.95 ms | 253.90 ms | Overall average latency improves. |
-| High-priority latency | 308.77 ms | 112.88 ms | The important request stops waiting. |
-| Low-priority latency | 339.14 ms | 394.92 ms | The lower-priority request pays. |
-| Preemptions | 0 | 1 | The win is bought with recompute. |
+| Metric                |        FCFS |    Priority | Reading                              |
+| --------------------- | ----------: | ----------: | ------------------------------------ |
+| Throughput            | 83.04 tok/s | 79.77 tok/s | Priority is slightly slower.         |
+| Avg TTFT              |   199.97 ms |   130.38 ms | First-token responsiveness improves. |
+| Avg latency           |   323.95 ms |   253.90 ms | Overall average latency improves.    |
+| High-priority latency |   308.77 ms |   112.88 ms | The important request stops waiting. |
+| Low-priority latency  |   339.14 ms |   394.92 ms | The lower-priority request pays.     |
+| Preemptions           |           0 |           1 | The win is bought with recompute.    |
 
 This is the scheduler tradeoff in miniature. High-priority latency falls to about 37% of the FCFS value. Throughput falls slightly because the preempted request loses its KV cache and has to prefill again later.
 
@@ -125,12 +125,12 @@ max_kv_tokens=32
 
 Here the KV-token budget is tight. Priority scheduling performs two preemptions. High-priority latency still improves, from **183.62 ms** to **120.07 ms**, but the rest of the metrics get worse:
 
-| Metric | FCFS | Priority |
-|---|---:|---:|
-| Throughput | 127.67 tok/s | 119.76 tok/s |
-| Avg TTFT | 75.94 ms | 90.15 ms |
-| Avg latency | 225.58 ms | 249.03 ms |
-| Low-priority latency | 253.56 ms | 335.00 ms |
+| Metric               |         FCFS |     Priority |
+| -------------------- | -----------: | -----------: |
+| Throughput           | 127.67 tok/s | 119.76 tok/s |
+| Avg TTFT             |     75.94 ms |     90.15 ms |
+| Avg latency          |    225.58 ms |    249.03 ms |
+| Low-priority latency |    253.56 ms |    335.00 ms |
 
 This is the honest version of priority scheduling. It does not delete waiting time. It moves waiting time onto less important work. Under memory pressure, it can also create extra compute by forcing preempted requests to rebuild their KV state.
 
@@ -167,14 +167,14 @@ Each request still advances one token at a time. The difference is that the mode
 
 The continuous batching benchmark has an important harness bug: the batched path does not complete the same number of requests as the sequential baseline.
 
-| Case | Requested Workload | Sequential Completed | Continuous Completed |
-|---|---:|---:|---:|
-| `small_smoke_test` | 8 | 8 | 5 |
-| `more_requests_small_batch` | 16 | 16 | 5 |
-| `more_requests_larger_batch` | 16 | 16 | 9 |
-| `longer_generations` | 16 | 16 | 9 |
-| `heavier_prompt` | 16 | 16 | 9 |
-| `stress_batch_capacity` | 32 | 32 | 9 |
+| Case                         | Requested Workload | Sequential Completed | Continuous Completed |
+| ---------------------------- | -----------------: | -------------------: | -------------------: |
+| `small_smoke_test`           |                  8 |                    8 |                    5 |
+| `more_requests_small_batch`  |                 16 |                   16 |                    5 |
+| `more_requests_larger_batch` |                 16 |                   16 |                    9 |
+| `longer_generations`         |                 16 |                   16 |                    9 |
+| `heavier_prompt`             |                 16 |                   16 |                    9 |
+| `stress_batch_capacity`      |                 32 |                   32 |                    9 |
 
 The admission loop pulls arrived requests into a temporary list. If the active batch is full, it requeues only the current overflow request and breaks. Later requests already removed from `pending` are lost from the run.
 
@@ -182,14 +182,14 @@ So the throughput ratios below should be read carefully. They show "tokens per s
 
 ### Continuous Batching Results
 
-| Case | Requests Configured | Max Batch | Seq Tok/s | Batched Tok/s | Speedup | Avg Lat Ratio | Avg TTFT Ratio | Batched Completion |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `small_smoke_test` | 8 | 4 | 271.52 | 524.11 | 1.93x | 1.37x | 1.94x | 5/8 |
-| `more_requests_small_batch` | 16 | 4 | 266.90 | 476.62 | 1.79x | 1.25x | 1.74x | 5/16 |
-| `more_requests_larger_batch` | 16 | 8 | 241.15 | 850.88 | 3.53x | 1.58x | 2.85x | 9/16 |
-| `longer_generations` | 16 | 8 | 265.04 | 956.53 | 3.61x | 1.51x | 3.98x | 9/16 |
-| `heavier_prompt` | 16 | 8 | 277.84 | 492.91 | 1.77x | 3.41x | 7.83x | 9/16 |
-| `stress_batch_capacity` | 32 | 8 | 246.66 | 671.97 | 2.72x | 1.97x | 3.21x | 9/32 |
+| Case                         | Requests Configured | Max Batch | Seq Tok/s | Batched Tok/s | Speedup | Avg Lat Ratio | Avg TTFT Ratio | Batched Completion |
+| ---------------------------- | ------------------: | --------: | --------: | ------------: | ------: | ------------: | -------------: | -----------------: |
+| `small_smoke_test`           |                   8 |         4 |    271.52 |        524.11 |   1.93x |         1.37x |          1.94x |                5/8 |
+| `more_requests_small_batch`  |                  16 |         4 |    266.90 |        476.62 |   1.79x |         1.25x |          1.74x |               5/16 |
+| `more_requests_larger_batch` |                  16 |         8 |    241.15 |        850.88 |   3.53x |         1.58x |          2.85x |               9/16 |
+| `longer_generations`         |                  16 |         8 |    265.04 |        956.53 |   3.61x |         1.51x |          3.98x |               9/16 |
+| `heavier_prompt`             |                  16 |         8 |    277.84 |        492.91 |   1.77x |         3.41x |          7.83x |               9/16 |
+| `stress_batch_capacity`      |                  32 |         8 |    246.66 |        671.97 |   2.72x |         1.97x |          3.21x |               9/32 |
 
 Even with the caveat, the shape is clear. When several requests share decode steps, generated-token throughput rises. The strongest named case is `longer_generations`, where throughput increases from **265.04 tok/s** to **956.53 tok/s**, a **3.61x** speedup.
 
@@ -199,14 +199,14 @@ Longer generations help because the expensive setup cost is amortized over more 
 
 Batching improves system throughput, but it can make individual requests wait:
 
-| Case | Sequential Avg Latency | Batched Avg Latency | Sequential Avg TTFT | Batched Avg TTFT |
-|---|---:|---:|---:|---:|
-| `small_smoke_test` | 58.93 ms | 80.78 ms | 5.01 ms | 9.70 ms |
-| `more_requests_small_batch` | 89.92 ms | 112.57 ms | 5.27 ms | 9.15 ms |
-| `more_requests_larger_batch` | 99.52 ms | 157.11 ms | 5.57 ms | 15.84 ms |
-| `longer_generations` | 181.10 ms | 272.66 ms | 4.32 ms | 17.21 ms |
-| `heavier_prompt` | 115.17 ms | 392.75 ms | 5.17 ms | 40.45 ms |
-| `stress_batch_capacity` | 129.73 ms | 255.02 ms | 5.69 ms | 18.29 ms |
+| Case                         | Sequential Avg Latency | Batched Avg Latency | Sequential Avg TTFT | Batched Avg TTFT |
+| ---------------------------- | ---------------------: | ------------------: | ------------------: | ---------------: |
+| `small_smoke_test`           |               58.93 ms |            80.78 ms |             5.01 ms |          9.70 ms |
+| `more_requests_small_batch`  |               89.92 ms |           112.57 ms |             5.27 ms |          9.15 ms |
+| `more_requests_larger_batch` |               99.52 ms |           157.11 ms |             5.57 ms |         15.84 ms |
+| `longer_generations`         |              181.10 ms |           272.66 ms |             4.32 ms |         17.21 ms |
+| `heavier_prompt`             |              115.17 ms |           392.75 ms |             5.17 ms |         40.45 ms |
+| `stress_batch_capacity`      |              129.73 ms |           255.02 ms |             5.69 ms |         18.29 ms |
 
 This is a serving-system theme that keeps coming back: throughput and latency are not the same objective.
 
@@ -219,12 +219,12 @@ This is exactly why prefill/decode interleaving matters. If prefill work can mon
 The batch-size sweep makes the mechanism more obvious:
 
 | Max Batch Size | Seq Tok/s | Batched Tok/s | Speedup | Avg Batch | Avg Lat Ratio | Avg TTFT Ratio | Batched Completion |
-|---:|---:|---:|---:|---:|---:|---:|---:|
-| 1 | 221.53 | 149.76 | 0.68x | 1.00 | 1.48x | 1.86x | 2/32 |
-| 2 | 255.75 | 246.86 | 0.97x | 1.50 | 1.53x | 1.40x | 3/32 |
-| 4 | 273.32 | 607.05 | 2.22x | 2.50 | 1.28x | 1.74x | 5/32 |
-| 8 | 235.78 | 651.10 | 2.76x | 4.50 | 1.77x | 3.76x | 9/32 |
-| 16 | 245.28 | 1469.02 | 5.99x | 8.50 | 1.96x | 5.25x | 17/32 |
+| -------------: | --------: | ------------: | ------: | --------: | ------------: | -------------: | -----------------: |
+|              1 |    221.53 |        149.76 |   0.68x |      1.00 |         1.48x |          1.86x |               2/32 |
+|              2 |    255.75 |        246.86 |   0.97x |      1.50 |         1.53x |          1.40x |               3/32 |
+|              4 |    273.32 |        607.05 |   2.22x |      2.50 |         1.28x |          1.74x |               5/32 |
+|              8 |    235.78 |        651.10 |   2.76x |      4.50 |         1.77x |          3.76x |               9/32 |
+|             16 |    245.28 |       1469.02 |   5.99x |      8.50 |         1.96x |          5.25x |              17/32 |
 
 At `max_batch_size=1`, the continuous batching path is slower than sequential serving. That makes sense: it has scheduler and cache-management overhead without real batching benefit. As the batch size grows, more requests share each forward pass, and throughput rises sharply.
 
@@ -259,13 +259,13 @@ In this implementation, the cache is block-based and content-addressed. With `pr
 
 ### Prefix Cache Results
 
-| Case | Requests | Prompt Tokens | Cached Tokens | Actual Prefill | Prefill Reduction | Hit Rate | Throughput Ratio | Evictions |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| `shared_prefix_basic` | 8 | 192 | 112 | 80 | 58.3% | 77.8% | 0.95x | 0 |
-| `high_reuse_many_requests` | 24 | 672 | 552 | 120 | 82.1% | 85.2% | 0.94x | 0 |
-| `multi_prefix_groups` | 24 | 576 | 320 | 256 | 55.6% | 76.9% | 0.94x | 0 |
-| `low_reuse_control` | 8 | 192 | 0 | 192 | 0.0% | 0.0% | 0.88x | 0 |
-| `eviction_pressure` | 24 | 576 | 0 | 576 | 0.0% | 0.0% | 0.85x | 136 |
+| Case                       | Requests | Prompt Tokens | Cached Tokens | Actual Prefill | Prefill Reduction | Hit Rate | Throughput Ratio | Evictions |
+| -------------------------- | -------: | ------------: | ------------: | -------------: | ----------------: | -------: | ---------------: | --------: |
+| `shared_prefix_basic`      |        8 |           192 |           112 |             80 |             58.3% |    77.8% |            0.95x |         0 |
+| `high_reuse_many_requests` |       24 |           672 |           552 |            120 |             82.1% |    85.2% |            0.94x |         0 |
+| `multi_prefix_groups`      |       24 |           576 |           320 |            256 |             55.6% |    76.9% |            0.94x |         0 |
+| `low_reuse_control`        |        8 |           192 |             0 |            192 |              0.0% |     0.0% |            0.88x |         0 |
+| `eviction_pressure`        |       24 |           576 |             0 |            576 |              0.0% |     0.0% |            0.85x |       136 |
 
 The first three rows show the cache doing what it was built to do:
 
@@ -281,13 +281,13 @@ So mechanically, prefix caching works.
 
 The wall-clock numbers go the other way:
 
-| Case | No Cache Gen Tok/s | Prefix Cache Gen Tok/s | Ratio |
-|---|---:|---:|---:|
-| `shared_prefix_basic` | 89.22 | 84.44 | 0.95x |
-| `high_reuse_many_requests` | 80.64 | 75.48 | 0.94x |
-| `multi_prefix_groups` | 81.10 | 76.43 | 0.94x |
-| `low_reuse_control` | 89.53 | 78.98 | 0.88x |
-| `eviction_pressure` | 81.30 | 68.75 | 0.85x |
+| Case                       | No Cache Gen Tok/s | Prefix Cache Gen Tok/s | Ratio |
+| -------------------------- | -----------------: | ---------------------: | ----: |
+| `shared_prefix_basic`      |              89.22 |                  84.44 | 0.95x |
+| `high_reuse_many_requests` |              80.64 |                  75.48 | 0.94x |
+| `multi_prefix_groups`      |              81.10 |                  76.43 | 0.94x |
+| `low_reuse_control`        |              89.53 |                  78.98 | 0.88x |
+| `eviction_pressure`        |              81.30 |                  68.75 | 0.85x |
 
 The cache saves prefill tokens, but the benchmark still gets slower.
 
@@ -303,13 +303,13 @@ That is still a useful result. It tells us the mechanism is correct and the impl
 
 In a larger serving system, prefix caching often improves TTFT for repeated long prompts. Here it increases TTFT in the shared-prefix cases:
 
-| Case | No Cache Avg TTFT | Prefix Cache Avg TTFT | Ratio |
-|---|---:|---:|---:|
-| `shared_prefix_basic` | 2.79 ms | 7.96 ms | 2.85x |
-| `high_reuse_many_requests` | 2.70 ms | 9.43 ms | 3.49x |
-| `multi_prefix_groups` | 2.78 ms | 6.64 ms | 2.39x |
-| `low_reuse_control` | 2.79 ms | 2.71 ms | 0.97x |
-| `eviction_pressure` | 2.76 ms | 2.69 ms | 0.98x |
+| Case                       | No Cache Avg TTFT | Prefix Cache Avg TTFT | Ratio |
+| -------------------------- | ----------------: | --------------------: | ----: |
+| `shared_prefix_basic`      |           2.79 ms |               7.96 ms | 2.85x |
+| `high_reuse_many_requests` |           2.70 ms |               9.43 ms | 3.49x |
+| `multi_prefix_groups`      |           2.78 ms |               6.64 ms | 2.39x |
+| `low_reuse_control`        |           2.79 ms |               2.71 ms | 0.97x |
+| `eviction_pressure`        |           2.76 ms |               2.69 ms | 0.98x |
 
 The control and eviction rows sit near **1.0x**, which suggests the TTFT penalty is tied to the cache-load path, not normal request processing. Again, the toy benchmark is telling us where the overhead lives.
 
