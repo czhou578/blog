@@ -14,7 +14,7 @@ Requests arrive at different times. Some are short, some are long. Some are urge
 
 That is the organizing question for this second benchmark post. Here I added a few more pieces to my NanoGPT serving toy: priority scheduling, prefix caching, and the beginnings of prefill/decode interleaving.
 
-The headline is not "everything got faster." That would be too clean, and also false. The more interesting result is that each feature changes a different part of the serving problem:
+The headline is not "everything got faster." The more interesting result is that each feature changes a different part of the serving problem:
 
 - **Scheduling** decides who gets served first.
 - **Continuous batching** shares one decode step across many requests.
@@ -137,100 +137,6 @@ Here the KV-token budget is tight. Priority scheduling performs two preemptions.
 This is the honest version of priority scheduling. It does not delete waiting time. It moves waiting time onto less important work. Under memory pressure, it can also create extra compute by forcing preempted requests to rebuild their KV state.
 
 For a serving system, that can still be the correct tradeoff. Interactive requests, paid-tier requests, moderation calls, or short latency-sensitive completions may deserve to jump ahead of slow background work. But the scheduler is a policy layer, not a free lunch machine.
-
-## Continuous Batching: Sharing The Decode Step
-
-Scheduling decides who enters the engine. Continuous batching decides how many active requests can share the same decode forward pass.
-
-Autoregressive decode has an awkward shape: each request can only produce one new token after the previous token is known. Without batching, the loop looks like this:
-
-```text
-request A: decode token 1
-request A: decode token 2
-request A: decode token 3
-...
-request B: decode token 1
-request B: decode token 2
-...
-```
-
-Continuous batching changes the loop:
-
-```text
-step 1: decode one token for A, B, C, D together
-step 2: decode one token for A, B, C, D together
-step 3: decode one token for A, B, C, D together
-...
-```
-
-Each request still advances one token at a time. The difference is that the model forward pass is shared across requests. On real GPUs, this is one of the central tricks that keeps serving throughput high.
-
-### A Caveat First
-
-The continuous batching benchmark has an important harness bug: the batched path does not complete the same number of requests as the sequential baseline.
-
-| Case                         | Requested Workload | Sequential Completed | Continuous Completed |
-| ---------------------------- | -----------------: | -------------------: | -------------------: |
-| `small_smoke_test`           |                  8 |                    8 |                    5 |
-| `more_requests_small_batch`  |                 16 |                   16 |                    5 |
-| `more_requests_larger_batch` |                 16 |                   16 |                    9 |
-| `longer_generations`         |                 16 |                   16 |                    9 |
-| `heavier_prompt`             |                 16 |                   16 |                    9 |
-| `stress_batch_capacity`      |                 32 |                   32 |                    9 |
-
-The admission loop pulls arrived requests into a temporary list. If the active batch is full, it requeues only the current overflow request and breaks. Later requests already removed from `pending` are lost from the run.
-
-So the throughput ratios below should be read carefully. They show "tokens per second while the batched engine is active," not a fair end-to-end comparison over the exact same workload. The mechanism is still visible, but the benchmark needs this fix before the numbers should be treated as rigorous.
-
-### Continuous Batching Results
-
-| Case                         | Requests Configured | Max Batch | Seq Tok/s | Batched Tok/s | Speedup | Avg Lat Ratio | Avg TTFT Ratio | Batched Completion |
-| ---------------------------- | ------------------: | --------: | --------: | ------------: | ------: | ------------: | -------------: | -----------------: |
-| `small_smoke_test`           |                   8 |         4 |    271.52 |        524.11 |   1.93x |         1.37x |          1.94x |                5/8 |
-| `more_requests_small_batch`  |                  16 |         4 |    266.90 |        476.62 |   1.79x |         1.25x |          1.74x |               5/16 |
-| `more_requests_larger_batch` |                  16 |         8 |    241.15 |        850.88 |   3.53x |         1.58x |          2.85x |               9/16 |
-| `longer_generations`         |                  16 |         8 |    265.04 |        956.53 |   3.61x |         1.51x |          3.98x |               9/16 |
-| `heavier_prompt`             |                  16 |         8 |    277.84 |        492.91 |   1.77x |         3.41x |          7.83x |               9/16 |
-| `stress_batch_capacity`      |                  32 |         8 |    246.66 |        671.97 |   2.72x |         1.97x |          3.21x |               9/32 |
-
-Even with the caveat, the shape is clear. When several requests share decode steps, generated-token throughput rises. The strongest named case is `longer_generations`, where throughput increases from **265.04 tok/s** to **956.53 tok/s**, a **3.61x** speedup.
-
-Longer generations help because the expensive setup cost is amortized over more decode steps. Once the active batch is warm, the engine gets many chances to run the same batched pattern.
-
-### The Latency Cost
-
-Batching improves system throughput, but it can make individual requests wait:
-
-| Case                         | Sequential Avg Latency | Batched Avg Latency | Sequential Avg TTFT | Batched Avg TTFT |
-| ---------------------------- | ---------------------: | ------------------: | ------------------: | ---------------: |
-| `small_smoke_test`           |               58.93 ms |            80.78 ms |             5.01 ms |          9.70 ms |
-| `more_requests_small_batch`  |               89.92 ms |           112.57 ms |             5.27 ms |          9.15 ms |
-| `more_requests_larger_batch` |               99.52 ms |           157.11 ms |             5.57 ms |         15.84 ms |
-| `longer_generations`         |              181.10 ms |           272.66 ms |             4.32 ms |         17.21 ms |
-| `heavier_prompt`             |              115.17 ms |           392.75 ms |             5.17 ms |         40.45 ms |
-| `stress_batch_capacity`      |              129.73 ms |           255.02 ms |             5.69 ms |         18.29 ms |
-
-This is a serving-system theme that keeps coming back: throughput and latency are not the same objective.
-
-The `heavier_prompt` row is the warning label. Throughput still improves by **1.77x**, but average TTFT gets **7.83x** worse. In this scaffold, prefill is handled individually before requests join the decode batch. Heavier prompts therefore delay first-token emission and eat into the benefit of batching.
-
-This is exactly why prefill/decode interleaving matters. If prefill work can monopolize the engine, decode tokens for already-active requests get stuck behind prompt processing.
-
-### Batch Size Sweep
-
-The batch-size sweep makes the mechanism more obvious:
-
-| Max Batch Size | Seq Tok/s | Batched Tok/s | Speedup | Avg Batch | Avg Lat Ratio | Avg TTFT Ratio | Batched Completion |
-| -------------: | --------: | ------------: | ------: | --------: | ------------: | -------------: | -----------------: |
-|              1 |    221.53 |        149.76 |   0.68x |      1.00 |         1.48x |          1.86x |               2/32 |
-|              2 |    255.75 |        246.86 |   0.97x |      1.50 |         1.53x |          1.40x |               3/32 |
-|              4 |    273.32 |        607.05 |   2.22x |      2.50 |         1.28x |          1.74x |               5/32 |
-|              8 |    235.78 |        651.10 |   2.76x |      4.50 |         1.77x |          3.76x |               9/32 |
-|             16 |    245.28 |       1469.02 |   5.99x |      8.50 |         1.96x |          5.25x |              17/32 |
-
-At `max_batch_size=1`, the continuous batching path is slower than sequential serving. That makes sense: it has scheduler and cache-management overhead without real batching benefit. As the batch size grows, more requests share each forward pass, and throughput rises sharply.
-
-So continuous batching is not magic either. It is an amortization trick. It needs enough concurrent work to pay for its bookkeeping.
 
 ## Prefix Caching: Memoization For Prompts
 
