@@ -6,7 +6,7 @@ date: 2026-05-29
 
 This is Part 2 of a series where I benchmark every inference optimization I add to NanoGPT. The goal is not just to make the code faster, but to make each optimization legible: what problem it solves, what metric it helps, and what tradeoff it quietly introduces.
 
-In Part 1, I looked at the first layer of serving mechanics: KV caching, continuous batching, and chunked prefill. In this post, the toy server gets a little more opinionated. Once the obvious caching and batching pieces are in place, NanoGPT starts to look less like a model wrapper and more like a small operating system.
+In [Part 1](/blog/2026/06/02/benchmarks-one), I looked at the first layer of serving mechanics: KV caching, continuous batching, and chunked prefill. In this post, the toy server gets a little more opinionated. Once the obvious caching and batching pieces are in place, NanoGPT starts to look less like a model wrapper and more like a small operating system.
 
 Requests arrive at different times. Some are short, some are long. Some are urgent. Some share a giant prompt prefix. Decode wants steady one-token steps; prefill wants to push big chunks of prompt through the model. The server has one recurring question:
 
@@ -283,3 +283,7 @@ So the practical mental model is:
 > KV caching remembers one request. Prefix caching remembers shared prompts. Scheduling decides who gets access. Interleaving decides how prefill and decode coexist.
 
 That is the next layer of LLM inference after "just run the model." The forward pass is still the expensive primitive, but the serving engine around it decides whether that primitive is spent wisely.
+
+For the full testing code, refer to [https://github.com/czhou578/multimodal-inference-visualizer/tree/main/benchmarks](https://github.com/czhou578/multimodal-inference-visualizer/tree/main/benchmarks)
+
+CZ
