@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Benchmarking NanoGPT Inference Optimizations - Part 1"
+title: "Part 1: Benchmarking KV Cache, Continuous Batching, and Chunked Prefill"
 date: 2026-05-29
 ---
 
@@ -306,5 +306,7 @@ kv_cache | 32     | 0.1166      | 274.34       | 3.61
 
 KV-cache throughput speedup: 2.29x
 ```
+
+For the full testing code, refer to [https://github.com/czhou578/multimodal-inference-visualizer/tree/main/benchmarks](https://github.com/czhou578/multimodal-inference-visualizer/tree/main/benchmarks)
 
 CZ
