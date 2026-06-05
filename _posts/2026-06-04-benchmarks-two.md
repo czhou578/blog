@@ -53,7 +53,8 @@ The scheduler does not make the transformer faster. It changes the answer to a p
 
 ### Scheduling Results
 
-![Scheduling Benchmark](/images/scheduling_benchmark.png)
+![Scheduling Benchmark]({{ site.baseurl }}/images/scheduling_benchmark.png)
+
 
 | Case                         | FCFS Tok/s | Priority Tok/s | Throughput Ratio | FCFS High-Priority Latency | Priority High-Priority Latency | High-Priority Latency Ratio | Preemptions |
 | ---------------------------- | ---------: | -------------: | ---------------: | -------------------------: | -----------------------------: | --------------------------: | ----------: |
@@ -166,7 +167,7 @@ In this implementation, the cache is block-based and content-addressed. With `pr
 
 ### Prefix Cache Results
 
-![Prefix Caching Benchmark](/images/prefix_caching_benchmark.png)
+![Prefix Caching Benchmark]({{ site.baseurl }}/images/prefix_caching_benchmark.png)
 
 | Case                       | Requests | Prompt Tokens | Cached Tokens | Actual Prefill | Prefill Reduction | Hit Rate | Throughput Ratio | Evictions |
 | -------------------------- | -------: | ------------: | ------------: | -------------: | ----------------: | -------: | ---------------: | --------: |
@@ -245,7 +246,7 @@ So the cache also has to be large enough to keep hot prefixes resident. Otherwis
 
 ## Interleaving: The Shape Of The Full Loop
 
-![Interleaving Benchmark](/images/interleaving_benchmark.png)
+![Interleaving Benchmark]({{ site.baseurl }}/images/interleaving_benchmark.png)
 
 Scheduling, batching, and prefix caching all point toward the same serving loop.
 
