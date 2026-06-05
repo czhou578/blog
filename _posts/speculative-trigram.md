@@ -6,7 +6,7 @@ date: 2026-05-29
 
 Speculative decoding uses a cheap draft model to propose candidate tokens, then verifies them against the target model in a single forward pass. The draft model does not need to be good. It needs to be cheap, plausible, and able to return the probability of whatever it sampled.
 
-The [previous post](/blog/2026/05/26/spec-decode) used a bigram draft — one token of context, one lookup table:
+The [previous post](/blog/2026/05/26/spec-decode) used a bigram draft, just like the one from Andrej Karpathy's original nanoGPT implementation — one token of context, one lookup table:
 
 ```text
 P(next_token | current_token)
@@ -17,6 +17,8 @@ This post upgrades the draft to a trigram:
 ```text
 P(next_token | previous_token, current_token)
 ```
+
+![trigram image]({{ site.baseurl }}/images/trigram-image.png)
 
 One additional token of context. The hypothesis is straightforward: if the draft sees more context, its guesses move closer to the target distribution. Closer guesses produce higher acceptance. Higher acceptance produces more tokens per target forward call.
 
