@@ -4,75 +4,45 @@ title: "Adding Trigram to Speculative Decoding"
 date: 2026-05-29
 ---
 
-Previously, we added speculative decoding to nanoGPT using a bigram draft model.
+Speculative decoding uses a cheap draft model to propose candidate tokens, then verifies them against the target model in a single forward pass. The draft model does not need to be good. It needs to be cheap, plausible, and able to return the probability of whatever it sampled.
 
-The bigram model was intentionally simple:
+The [previous post](/blog/2026/05/26/spec-decode) used a bigram draft — one token of context, one lookup table:
 
 ```text
 P(next_token | current_token)
 ```
 
-It could look at one token of context, sample a few cheap draft tokens, and let the real transformer verify them in one forward pass.
-
-In this post, we will upgrade the draft model from a bigram to a trigram:
+This post upgrades the draft to a trigram:
 
 ```text
 P(next_token | previous_token, current_token)
 ```
 
-The hope is simple. If the draft model sees a little more context, its guesses should be closer to the target model. If the guesses are closer, speculative decoding accepts more tokens. If it accepts more tokens, we get more generated tokens per expensive target-model forward pass.
+One additional token of context. The hypothesis is straightforward: if the draft sees more context, its guesses move closer to the target distribution. Closer guesses produce higher acceptance. Higher acceptance produces more tokens per target forward call.
 
-## Why Trigram?
+## Why trigram over bigram
 
-A bigram table is a tiny lookup table of shape:
-
-```text
-(vocab_size, vocab_size)
-```
-
-Row `a` stores the distribution of tokens that usually follow token `a`.
-
-This is useful, but it is also obviously limited. Suppose the current token is `"t"`. What comes next?
+A bigram table stores a distribution for each single token. When the current token is `"t"`, the bigram must average over every possible preceding context:
 
 ```text
-" t" -> likely "h" or "o"
-"ht" -> probably rare
-"st" -> maybe " " or another letter
+" t" → likely "h" or "o"
+"ht" → probably rare
+"st" → maybe " " or another letter
 ```
 
-The next token depends a lot on the previous token. A bigram only sees `"t"`, so it has to average all of these situations together.
+A trigram distinguishes these cases. It conditions on both the previous token and the current token, producing a sharper prediction for each specific two-token context.
 
-A trigram table keeps one more token of context. It asks:
+This is still a weak language model. It knows nothing about syntax, meaning, attention, or long-range dependencies. But for speculative decoding, the draft model's job is narrow: guess plausibly, guess cheaply, and report the probability of each guess accurately.
+
+## Building the table
+
+The trigram table is a 3D count tensor:
 
 ```text
-given (previous_token, current_token), what usually comes next?
+counts[a, b, c] = number of times token c followed context (a, b)
 ```
 
-This is still a very weak language model. It knows nothing about syntax, meaning, attention, or long-range dependencies. But for speculative decoding, the draft model does not need to be smart in the transformer sense. It needs to be:
-
-- cheap
-- plausible
-- able to return the probability of whatever it sampled
-
-A trigram table does all three.
-
-## The Table
-
-The core object is a 3D count tensor:
-
-```text
-counts[a, b, c] = number of times token c followed the context (a, b)
-```
-
-For a character-level Shakespeare vocabulary of about 65 tokens, this table has:
-
-```text
-65 * 65 * 65 = 274,625 entries
-```
-
-That sounds large compared to the bigram table, but in absolute terms it is tiny. It is just a few hundred thousand floats. No matmuls, no attention, no layers, just indexing.
-
-Here is the draft model:
+For a character-level Shakespeare vocabulary of ~65 tokens, this table has `65 × 65 × 65 = 274,625` entries. Compared to the bigram table, this sounds large. In absolute terms, it is a few hundred thousand floats — no matrix multiplications, no attention, no layers. Just indexing.
 
 ```python
 class TrigramDraftModel:
@@ -95,28 +65,9 @@ class TrigramDraftModel:
         self.min_context_count = min_context_count
 ```
 
-Let's unpack it.
+The construction has three stages.
 
-```python
-counts = torch.zeros(vocab_size, vocab_size, vocab_size, dtype=torch.float32)
-```
-
-This creates the raw histogram. The three axes are:
-
-```text
-previous token, current token, next token
-```
-
-So `counts[a, b]` is a vector of length `vocab_size`. It stores the next-token histogram after seeing the two-token context `(a, b)`.
-
-Then we scan the training data with a sliding window:
-
-```python
-for a, b, c in zip(ids[:-2].tolist(), ids[1:-1].tolist(), ids[2:].tolist()):
-    counts[a, b, c] += 1.0
-```
-
-Visually:
+**Counting.** A sliding window scans all consecutive triples `(a, b, c)` in the training data:
 
 ```text
 tokens:  [x0, x1, x2, x3, x4, ...]
@@ -125,46 +76,27 @@ window:      (x1, x2, x3)
 window:          (x2, x3, x4)
 ```
 
-For each triple `(a, b, c)`, we increment the count saying that `c` followed `(a, b)`.
+Each triple increments `counts[a, b, c]`.
 
-Before smoothing, we save the amount of real evidence for each context:
-
-```python
-self.context_counts = counts.sum(dim=-1)
-```
-
-This produces a `(vocab_size, vocab_size)` tensor:
+**Evidence tracking.** Before smoothing, the total count per context is saved:
 
 ```text
 context_counts[a, b] = number of times context (a, b) appeared
 ```
 
-This matters because trigram tables are sparse. Some contexts appear thousands of times. Some appear once. Some never appear. We should not trust all rows equally.
+This matters because trigram tables are sparse. Some contexts appear thousands of times. Some appear once. Some never appear. The model should not trust all rows equally.
 
-Finally, we smooth and normalize:
-
-```python
-counts += 1.0
-self.probs = counts / counts.sum(dim=-1, keepdim=True)
-```
-
-After this, every `self.probs[a, b]` is a valid next-token probability distribution:
+**Smoothing and normalization.** Laplace smoothing (`+1`) ensures no probability is zero, then each row is normalized:
 
 ```text
 self.probs[a, b, c] = P(c | a, b)
 ```
 
-The `+1` is Laplace smoothing. It prevents zero probabilities, which is important because speculative decoding compares the target and draft distributions using a ratio:
+Zero probabilities would break speculative decoding's accept/reject math, which computes the ratio `target_prob[token] / draft_prob[token]`. Smoothing keeps every token legal.
 
-```text
-target_prob[token] / draft_prob[token]
-```
+## Retrieving probabilities
 
-If the draft probability is zero, the math becomes numerically awkward. Smoothing keeps every token legal.
-
-## Probabilities
-
-The most important method is `get_probs`. It returns the exact distribution that the draft model will sample from.
+The central method returns the distribution the draft model will sample from:
 
 ```python
 def get_probs(self, prev_token_id, token_id, temperature=1.0):
@@ -189,81 +121,49 @@ def get_probs(self, prev_token_id, token_id, temperature=1.0):
     return scaled / scaled.sum()
 ```
 
-The normal trigram path is just:
-
-```python
-probs = self.probs[prev_token_id, token_id]
-```
-
-The shape goes from:
+The normal path is a single index operation:
 
 ```text
-self.probs                (vocab_size, vocab_size, vocab_size)
-self.probs[prev, current] (vocab_size,)
+self.probs[prev, current] → (vocab_size,)
 ```
 
-That one row is the full distribution over the next token.
+That one row is the full next-token distribution.
 
-There are two fallback cases.
+Two fallback cases handle edge conditions:
 
-First, sometimes we only have one token of context:
+**No previous token.** At the start of generation, only one token of context exists. The model falls back to the bigram: `P(next | current)`.
 
-```python
-if prev_token_id is None:
-    probs = self.fallback_bigram.get_probs(token_id)
-```
-
-A trigram needs `(prev, current)`. At the very beginning of generation, we may only have `current`. In that case, the natural thing is to fall back to the bigram:
+**Rare context.** Laplace smoothing makes every row valid, but not every row informative. If a context appeared fewer than `min_context_count` times in training, its smoothed trigram row is mostly a weak prior. A bigram row with thousands of observations is more useful. The policy:
 
 ```text
-P(next | current)
-```
-
-Second, sometimes the trigram context exists but is too rare:
-
-```python
-self.context_counts[prev_token_id, token_id] < self.min_context_count
-```
-
-This is subtle but important. Laplace smoothing makes every row valid, but it does not make every row good. If a context never appeared in the training data, its smoothed trigram row is mostly just a weak prior. A bigram row may be much more useful because it has seen the current token many times.
-
-So the policy is:
-
-```text
-If the trigram context has enough evidence, use P(next | prev, current).
-Otherwise, fall back to P(next | current).
+If the trigram context has enough evidence → use P(next | prev, current)
+Otherwise → fall back to P(next | current)
 ```
 
 This keeps the trigram sharp when it has evidence and conservative when it does not.
 
 ### Temperature
 
-The draft model also supports temperature:
+Temperature is applied after selecting the trigram or fallback row:
 
 ```python
 scaled = probs.clamp_min(1e-12).pow(1.0 / temperature)
 return scaled / scaled.sum()
 ```
 
-We apply temperature after choosing either the trigram row or the fallback bigram row. This keeps the code compatible with the original `BigramDraftModel`, whose `get_probs` method only takes `token_id`.
-
-Temperature changes the shape of a probability distribution:
-
 ```text
-temperature < 1.0  -> sharper, more greedy
-temperature = 1.0  -> unchanged
-temperature > 1.0  -> flatter, more random
+temperature < 1.0 → sharper, more greedy
+temperature = 1.0 → unchanged
+temperature > 1.0 → flatter, more random
 ```
 
-The key rule in speculative decoding is that the returned `draft_probs[i]` must match the distribution that actually produced `candidates[i]`.
+The critical invariant: `draft_probs[i]` must match the distribution that produced `candidates[i]`. If a candidate is sampled from the temperature-scaled distribution but the unscaled distribution is returned, the accept/reject math is wrong and the algorithm no longer preserves the target model's output distribution.
 
-If we sample a candidate from the temperature-scaled distribution but return the unscaled distribution, the accept/reject math is wrong. The algorithm no longer preserves the target model distribution exactly.
-
-The `clamp_min(1e-12)` is a small numerical guard. In theory, Laplace smoothing should already make probabilities non-zero. In practice, after device moves, dtype changes, or future modifications, it is cheap to protect the exponentiation from exact zeros.
+The `clamp_min(1e-12)` is a numerical guard. Laplace smoothing should already prevent zero probabilities, but device moves and dtype changes can introduce edge cases.
 
 ## Sampling
 
-Sampling is now just a wrapper around `get_probs`:
+Sampling is a wrapper around `get_probs`:
 
 ```python
 def sample(self, prev_token_id, token_id, *, temperature=1.0, generator=None):
@@ -272,18 +172,11 @@ def sample(self, prev_token_id, token_id, *, temperature=1.0, generator=None):
     return next_token, probs
 ```
 
-Notice that we return both:
+Both the sampled token and the distribution that produced it are returned. The second return value is not optional — the speculative accept/reject step requires the draft probability of each sampled token.
 
-```text
-next_token -> the sampled candidate
-probs      -> the distribution that produced it
-```
+## Drafting candidates
 
-That second return value is not optional. The speculative accept/reject step needs the draft probability of the sampled token.
-
-## Drafting Candidates
-
-The draft phase changes slightly because the trigram needs two tokens of rolling context.
+The draft phase changes slightly because the trigram requires two tokens of rolling context:
 
 ```python
 def draft_tokens(draft_model, prev_token, current_token, K, temperature=1.0):
@@ -303,41 +196,36 @@ def draft_tokens(draft_model, prev_token, current_token, K, temperature=1.0):
     return candidates, draft_probs
 ```
 
-The chain looks like:
+The context rolls forward with each draft token:
 
 ```text
-(prev_token, current_token)  -> candidate_0
-(current_token, candidate_0) -> candidate_1
-(candidate_0, candidate_1)   -> candidate_2
+(prev_token, current_token)  → candidate_0
+(current_token, candidate_0) → candidate_1
+(candidate_0, candidate_1)   → candidate_2
 ```
 
 This rolling context is internal to the draft model. The target model does not need to know that the draft used a trigram.
 
-## The Speculative Loop
+## The speculative loop
 
-The target verification step stays almost the same as before.
+Target verification is unchanged from the bigram version. Only two pieces of draft state are new.
 
-This is the part that is easy to get wrong. Because the draft model uses `prev_token`, it is tempting to feed `prev_token` into the target model during verification too.
+**Initialization:**
 
-Do not do that.
-
-The target model already has everything before `current_token` in its KV cache. If the cache ends after `prev_token`, then verification starts at `current_token`.
-
-```text
-wrong:
-[prev_token, current_token, candidate_0, candidate_1, ...]
-
-right:
-[current_token, candidate_0, candidate_1, ...]
+```python
+prev_token = prompt_tokens[-1]
 ```
 
-The rule is:
+**Update after accepted tokens:**
 
-```text
-verification input starts exactly where the KV cache ends
+```python
+for token in accepted:
+    prev_token, current_token = current_token, token
 ```
 
-Here is the loop with the trigram state added:
+The draft model always needs the last two emitted tokens. After every accepted token, the pair rolls forward.
+
+The full loop:
 
 ```python
 @torch.no_grad()
@@ -384,50 +272,44 @@ def speculative_generate(target_model, draft_model, prompt_tokens, max_new_token
     return generated[:max_new_tokens]
 ```
 
-Only two pieces of state are new:
+One important detail: if `accept_reject` emits a resampled token after rejection, that token must update `(prev_token, current_token)`. The next draft context must reflect the actual output sequence, not the rejected candidate chain.
 
-```python
-prev_token = prompt_tokens[-1]
+## A common verification mistake
+
+Because the draft model uses `prev_token`, it is tempting to include `prev_token` in the verification input. This is incorrect. The target model already has everything before `current_token` in its KV cache.
+
+```text
+wrong:  [prev_token, current_token, candidate_0, candidate_1, ...]
+right:  [current_token, candidate_0, candidate_1, ...]
 ```
 
-and:
+The rule: verification input starts exactly where the KV cache ends.
 
-```python
-for token in accepted:
-    prev_token, current_token = current_token, token
-```
+## Implementation constraints
 
-The draft model needs the last two emitted tokens. After every accepted token, we roll the pair forward.
+Several constraints apply when the draft model changes from bigram to trigram:
 
-One more detail: if your `accept_reject` function can emit a resampled token after rejection, make sure that token is included in `accepted` or otherwise used to update `(prev_token, current_token)`. The next draft context must be based on the actual output sequence, not the rejected candidate chain.
-
-## Gotchas
-
-The main gotchas are all about keeping the probability bookkeeping exact.
-
-**The draft distribution must match the sampled token.** If `candidate_i` was sampled from `P(next | a, b)`, then `draft_probs[i]` must be that same row, with the same temperature. Recomputing with the wrong rolling context breaks rejection sampling.
-
-**Do not feed `prev_token` into verification.** It is already represented in the target model's KV cache. Verification still starts from `[current_token] + candidates`.
-
-**Sparse trigram rows can hurt.** A smoothed trigram row from a context seen once may be worse than a bigram row seen thousands of times. This is why `min_context_count` exists.
-
-**Dense trigram storage only works because the vocabulary is tiny.** For character-level nanoGPT, `(65, 65, 65)` is fine. For a 50k-token LLM vocabulary, a dense trigram tensor is impossible. Production n-gram proposers use sparse maps, suffix arrays, or retrieval-style methods over observed spans.
-
-**State must update after every emitted token.** The draft context is always the last two real output tokens. If rejection produces a resampled token, that token becomes part of the real sequence.
+- **Distribution-sample consistency.** `draft_probs[i]` must be the exact distribution that produced `candidates[i]`, including temperature. Recomputing with a different rolling context breaks rejection sampling.
+- **Verification boundary.** `prev_token` is already in the KV cache. Verification starts from `[current_token] + candidates`.
+- **Sparse context handling.** A smoothed trigram row from a context seen once may be worse than a bigram row seen thousands of times. This is why `min_context_count` and bigram fallback exist.
+- **Dense storage limits.** A `(65, 65, 65)` tensor works for character-level nanoGPT. For a 50k-token LLM vocabulary, dense trigram storage is infeasible. Production n-gram proposers use sparse maps, suffix arrays, or retrieval-style methods.
+- **State update discipline.** The draft context is always the last two real output tokens. If rejection produces a resampled token, that token becomes part of the real sequence and must update the context pair.
 
 ## Summary
 
-The trigram upgrade is a small change with a useful lesson.
+The trigram upgrade is a minimal change to the speculative decoding pipeline. The target model is unchanged. Verification is unchanged. The KV cache rule is unchanged.
 
-The target model is unchanged. Verification is unchanged. The KV cache rule is unchanged.
-
-Only the draft model got a little more context:
+Only the draft model gains one additional token of context:
 
 ```text
 bigram:  P(next | current)
 trigram: P(next | previous, current)
 ```
 
-That extra token of context should make the draft guesses more realistic, which should increase acceptance rate and improve throughput. At the same time, fallback to bigram keeps the model from trusting rare trigram contexts too much.
+That extra context produces sharper draft predictions, which should increase acceptance and improve throughput. Bigram fallback prevents the model from over-trusting rare trigram contexts.
 
-The whole point is not that trigram is a great language model. It is not. The point is that speculative decoding rewards cheap models that are just good enough to guess ahead.
+The broader point is not that a trigram is a good language model. It is not. The point is that speculative decoding rewards any cheap model that is just good enough to guess ahead — and a trigram table is one step closer to "good enough" than a bigram.
+
+You can find the entire code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-trigram-spec-decode.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-trigram-spec-decode.py)
+
+CZ
