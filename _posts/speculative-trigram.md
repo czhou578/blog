@@ -210,6 +210,8 @@ This rolling context is internal to the draft model. The target model does not n
 
 ## The speculative loop
 
+![Sequence timeline of draft vs verify phase]({{ site.baseurl }}/images/sequence-timeline.png)
+
 Target verification is unchanged from the bigram version. Only two pieces of draft state are new.
 
 **Initialization:**
@@ -298,6 +300,8 @@ Several constraints apply when the draft model changes from bigram to trigram:
 - **State update discipline.** The draft context is always the last two real output tokens. If rejection produces a resampled token, that token becomes part of the real sequence and must update the context pair.
 
 ## Summary
+
+![Comparison of speculative decoding performance]({{ site.baseurl }}/images/compare-speculative-decode.png)
 
 The trigram upgrade is a minimal change to the speculative decoding pipeline. The target model is unchanged. Verification is unchanged. The KV cache rule is unchanged.
 
