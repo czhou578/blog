@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Benchmarking NanoGPT Inference, Part 2: Teaching The Server To Spend Its Next Forward Pass"
-date: 2026-05-29
+date: 2026-06-04
 ---
 
 This is Part 2 of a series where I benchmark every inference optimization I add to NanoGPT. The goal is not just to make the code faster, but to make each optimization legible: what problem it solves, what metric it helps, and what tradeoff it quietly introduces.
