@@ -4,13 +4,17 @@ title: "Testing Correctness Across Every Inference Optimization"
 date: 2026-06-05
 ---
 
-Every optimization in this series silently assumed it didn't break the model. KV caching assumed the cache reproduces the same attention as a full recompute. Continuous batching assumed that stacking requests into one forward pass doesn't change any individual request's output. Paged attention assumed that scattering KV entries across a block pool and gathering them back produces the same tensors. Speculative decoding assumed the accept/reject math preserves the target distribution exactly.
+The scariest bugs in inference optimization are the ones that don't crash.
 
-None of that was tested until now.
+A wrong positional embedding doesn't throw an error — the model just produces slightly worse text. A KV cache that silently drops one entry doesn't segfault — the attention scores shift by a fraction and the output drifts in a way that looks like the model is being "creative." A broken attention mask in a fused batch doesn't fail loudly — it lets one request peek at another's KV entries, and the outputs look plausible but are subtly contaminated.
 
-This post walks through 10 correctness equivalence tests. Each test isolates one optimization and compares it against the simplest possible baseline. If the outputs diverge, the optimization has a bug. If they match, the optimization is at least not silently wrong.
+Over the course of this blog series, I've implemented KV caching, continuous batching, paged attention, prefix caching, chunked prefill, speculative decoding, and fused interleaved inference. Each one assumed it didn't break the model. Each one had plenty of opportunities to introduce exactly the kind of silent corruption described above.
+
+This post describes 10 correctness equivalence tests that check each optimization against the simplest possible baseline. The structure is the same every time: run the optimized path, run the naive path, compare outputs. If they diverge, the optimization has a bug.
 
 The key testing technique: **most of these tests use greedy (argmax) decoding**. Greedy decoding eliminates randomness entirely. There is exactly one correct next token at every step. If the optimized path produces a different token than the baseline path, that is not a flaky test or a sampling artifact — it is a real bug in the code. The two tests that do involve sampling use statistical methods instead.
+
+All 10 tests were run against the [trigram speculative decoding](/blog/2026/06/05/speculative-trigram) NanoGPT file, which exercises the full stack — KV caching, batching, paged attention, prefix caching, speculative decoding with both bigram and trigram draft models, chunked prefill, and fused interleaved inference. Every test passed.
 
 ## 1. Recompute vs. KV Cache
 
@@ -303,7 +307,7 @@ If the attention mask, input mask, or left-padding logic is wrong, one of the tw
 
 ## Running The Tests
 
-The full test suite runs in a few seconds on CPU after training:
+I ran the full suite against [nanogpt-trigram-spec-decode.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-trigram-spec-decode.py), the most complete version of the NanoGPT inference engine that includes every optimization from this blog series. The tests finish in a few seconds on CPU after training:
 
 ```python
 from benchmarks.test_correctness_equivalence import run_all_correctness_tests
