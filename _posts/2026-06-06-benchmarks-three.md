@@ -76,6 +76,8 @@ This is not a neural network. It is a transition-count table built from training
 
 ### Bigram results
 
+![Speculative Decoding Benchmark]({{ site.baseurl }}/images/speculative-decoding-benchmark.png)
+
 | Case | Requests | Generated Tokens | K | KV Tok/s | Spec Tok/s | Throughput Ratio | Target Call Ratio | Target Token Ratio | Acceptance |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `k2_bigram_draft` | 8 | 128 | 2 | 896.05 | 1379.86 | 1.54x | 0.49x | 1.13x | 63.6% |
@@ -87,6 +89,8 @@ This is not a neural network. It is a transition-count table built from training
 Every configuration is faster than the KV baseline. Average throughput ratio: approximately **1.71x**.
 
 ### The shape of the speedup
+
+![KV Decode vs Speculative Decode]({{ site.baseurl }}/images/spec_decode_timeline.png)
 
 The speedup does not come from doing less work. It comes from doing work differently.
 
@@ -121,6 +125,8 @@ Meanwhile, total target tokens evaluated *increase*:
 On this CPU benchmark, reducing call overhead and eliminating serial stepping outweighs the additional token evaluations.
 
 ### Speculation depth
+
+![Speculation Depth Tradeoff]({{ site.baseurl }}/images/spec_depth_tradeoff.png)
 
 The three clean bigram rows isolate the effect of `K`:
 
