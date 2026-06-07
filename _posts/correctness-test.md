@@ -46,6 +46,8 @@ def _greedy_decode(model, past_kvs, last_token, num_steps, device):
 
 ## Test 1: Full recompute == KV-cached incremental
 
+![KV Cache Logit Alignment]({{ site.baseurl }}/images/kv_cache_logit_alignment.png)
+
 The most fundamental equivalence. If the KV cache is implemented correctly, decoding token-by-token with a growing cache must produce the same logits as a single forward pass over the entire sequence.
 
 **Baseline:** Prefill a prompt, decode N tokens with the KV cache, save each step's logits.
@@ -221,6 +223,8 @@ The trigram draft is used specifically because it has low acceptance and produce
 
 ## Test 7: KV cache trim consistency
 
+![KV Cache Trim]({{ site.baseurl }}/images/kv_cache_trim.png)
+
 Speculative decoding needs to trim the KV cache after rejection. If 2 of 4 draft tokens are accepted, the cache must discard the KV entries for positions 3 and 4 but keep everything through position 2.
 
 This test builds a cache through a controlled sequence:
@@ -296,6 +300,8 @@ This catches bugs in positional-encoding threading across chunk boundaries, KV-c
 ---
 
 ## Test 10: Fused interleaved == Sequential
+
+![Fused Interleaved Layout]({{ site.baseurl }}/images/fused_interleaved_layout.png)
 
 The most complex equivalence test. Interleaved scheduling packs a decode token and a prefill chunk into one batched forward pass, using left-padding and attention masks to prevent the two requests from interfering.
 
