@@ -2,6 +2,7 @@
 layout: post
 title: "Adding Chunked Prefill to NanoGPT"
 date: 2026-05-13
+image: https://czhou578.github.io/blog/images/prefill_starvation_comparison.png
 ---
 
 <script type="module">
