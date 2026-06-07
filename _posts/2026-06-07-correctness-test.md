@@ -26,6 +26,8 @@ def _greedy_token(logits):
     return logits[0, -1, :].argmax().item()
 ```
 
+`logits` has shape `(batch=1, seq_len, vocab_size)`. Index `[0, -1, :]` grabs the logit vector at the last sequence position of the first (only) batch element — this is the distribution over next tokens. `.argmax()` selects the highest-probability token deterministically, and `.item()` converts the scalar tensor to a Python int.
+
 A shared helper handles greedy decode loops:
 
 ```python
@@ -41,6 +43,8 @@ def _greedy_decode(model, past_kvs, last_token, num_steps, device):
         generated.append(last_token)
     return generated, past_kvs
 ```
+
+This drives the standard incremental decode loop. `past_kvs[0][0][0].shape[1]` reads the KV cache length from the first layer, first head, first element (key tensor) — the sequence length dimension tells the model what position the next token occupies. `inp` is shaped `(1, 1)` — a single token for a single batch element. `pos` is `[[cache_len]]` because the new token's absolute position equals the number of tokens already in the cache. The model returns updated `past_kvs` with the new token's KV appended, so each iteration the cache grows by one.
 
 ---
 
@@ -65,7 +69,11 @@ for _ in range(num_decode_steps - 1):
     pos = torch.tensor([[cache_len]], dtype=torch.long, device=device)
     logits, _, past_kvs = model(inp, pos=pos, past_kvs=past_kvs)
     cached_logits.append(logits[0, -1, :].clone())
+```
 
+The first call processes the entire prompt in one forward pass, returning logits for every position and a populated KV cache. `logits[0, -1, :].clone()` captures the logit vector at the last prompt position — this is the distribution that predicts the first generated token. The `.clone()` is critical: without it, the tensor could be overwritten by the next forward call. Each subsequent iteration feeds one new token and gets one new logit vector, building a list of per-step logits.
+
+```python
 # Recompute path
 full_seq = prompt + generated
 full_logits, _, _ = model(torch.tensor([full_seq]), pos=full_positions)
@@ -74,6 +82,8 @@ full_logits, _, _ = model(torch.tensor([full_seq]), pos=full_positions)
 for i in range(len(cached_logits)):
     assert torch.allclose(cached_logits[i], full_logits[0, prompt_len - 1 + i, :], atol=1e-5)
 ```
+
+The recompute path concatenates the original prompt with all generated tokens and runs one forward pass with no cache. The model sees the complete context and produces logits at every position. The comparison uses `torch.allclose` with `atol=1e-5` to account for floating-point differences between the two computation orders (cache-appended vs. single-pass).
 
 The comparison index is `prompt_len - 1 + i`, not `prompt_len + i`. In the full forward pass, position `prompt_len - 1` predicts the first generated token. This off-by-one is easy to get wrong — the test catches it.
 
@@ -97,7 +107,19 @@ for _ in range(decode_steps - 1):
     all_kvs = _unstack_kvs(new_stacked)
 ```
 
-Under argmax, every request must produce the same token sequence whether decoded alone or in a batch. Any mismatch indicates a bug in KV stacking, position computation, or logit indexing.
+`_stack_kvs(all_kvs)` takes a list of per-request KV caches (each with shape `(1, cache_len, head_size)` per head per layer) and stacks them along the batch dimension to produce tensors of shape `(num_requests, cache_len, head_size)`. `inp` is shaped `(num_requests, 1)` — one token per request, stacked vertically. `pos` is `(num_requests, 1)` filled with `cache_len` — every request has the same position because they all started with prompts of equal length and have decoded the same number of steps.
+
+After the forward pass, `_unstack_kvs` splits the batched cache back into per-request caches. This round-trip — stack, forward, unstack — must preserve each request's KV entries without any cross-contamination between rows.
+
+```python
+last_tokens = []
+for i in range(num_requests):
+    token = logits[i, -1, :].argmax().item()
+    batched_tokens[i].append(token)
+    last_tokens.append(token)
+```
+
+Each request's logits are indexed by row `i` in the batch dimension. `logits[i, -1, :]` extracts the last-position logits for request `i`. Under argmax, every request must produce the same token sequence whether decoded alone or in a batch. Any mismatch indicates a bug in KV stacking, position computation, or logit indexing.
 
 ---
 
@@ -134,6 +156,8 @@ for _ in range(decode_steps - 1):
             pool.v_pool[(layer_idx, head_idx)][phys, slot, :] = v[0, -1, :]
 ```
 
+Each decode step has three phases. **Block allocation:** when `num_filled` is exactly divisible by `page_block_size`, the current block is full and a new one must be allocated. **Gather:** `_gather_paged_kv` walks the block table, reads physical blocks from the pool in logical order, and assembles a contiguous KV tensor the model can consume. The `req_obj` carries the block table and fill count so the gather function knows which blocks to read and how many slots are valid. **Write-back:** after the forward pass, the model returns `new_kvs` containing the full cache (gathered input + new token). Only the *last* position (`k[0, -1, :]`) is the new entry — the rest are copies of what was gathered. The physical block and slot within that block are computed via `num_filled // page_block_size` and `num_filled % page_block_size`.
+
 The gather-decode-write cycle exercises the full paged attention path. If any block mapping is wrong, the gathered KV will contain stale or misaligned entries, and the argmax tokens will diverge.
 
 ---
@@ -150,6 +174,8 @@ suffixes = [torch.randint(0, vocab_size, (unique_suffix_len,)).tolist() for _ in
 prompts = [prefix + s for s in suffixes]
 ```
 
+`torch.randint` generates random token IDs. All three prompts share the same `prefix` list, so their first 12 tokens are identical. Each gets a different random `suffix`, making the final 4 tokens unique. This setup guarantees that requests 1 and 2 should hit the prefix cache populated by request 0.
+
 **Baseline:** Full prefill for each prompt. No caching.
 
 **Cached:** Request 0 populates the prefix cache. Requests 1 and 2 hit it, loading cached KV blocks and prefilling only the suffix.
@@ -162,6 +188,12 @@ pos = torch.arange(start, end, dtype=torch.long, device=device).unsqueeze(0)
 logits, _, new_kvs = model(idx, pos=pos, past_kvs=req.past_kvs)
 _commit_completed_blocks(req, block_cache, prefix_block_size)
 ```
+
+`_load_cached_prefix` looks up the request's prompt tokens in the hash-indexed block cache. If matching blocks exist, it loads their KV entries into `req.past_kvs` and advances `req.prefill_cursor` past the cached portion. For request 0, nothing is cached yet, so `prefill_cursor` stays at 0 and the full prompt is prefilled. For requests 1 and 2, the shared prefix blocks are loaded from cache.
+
+`start = req.prefill_cursor` is the key variable — it tells us where the cache left off. `prompt[start:end]` slices only the uncached suffix tokens. `pos` uses `torch.arange(start, end)` because each token needs its correct *absolute* position, not a position relative to the suffix start. The model receives `past_kvs=req.past_kvs` which already contains the cached prefix KV, so the suffix attention can attend to the full prefix context.
+
+`_commit_completed_blocks` writes the newly computed KV blocks back to the cache so future requests can reuse them.
 
 The test also verifies that requests after the first actually load cached blocks (`req.cached_prefix_tokens > 0`). A cache miss on requests 1–2 would mean the caching path is silently broken, even if the outputs happen to match.
 
@@ -184,6 +216,8 @@ for i, draft_tok in enumerate(candidates):
         accepted.append(target_argmax)
         break
 ```
+
+`v_logits` has shape `(1, K+1, vocab_size)` — the target model scored the current token plus all K candidates in one forward pass. `v_logits[0, i, :]` is the target's logit distribution at verification position `i`, which predicts what token should follow the first `i` candidates. If the draft token matches the target's argmax at that position, it is accepted and we move to the next candidate. On the first mismatch, the target's argmax replaces the draft token and the loop breaks — all subsequent candidates are discarded because they were conditioned on the wrong token.
 
 Both bigram and trigram draft models are tested. Three prompts, eight decode tokens each. Any token-level mismatch is a bug in the verify loop, the KV trim, or the rolling context update.
 
@@ -214,6 +248,10 @@ else:
     adjusted = adjusted / adjusted.sum()
     output_token = torch.multinomial(adjusted, 1, generator=gen).item()
 ```
+
+`q` is the draft model's probability for the proposed token, clamped above zero to avoid division by zero. `p` is the target model's probability for the same token. The acceptance probability is `p/q`, clamped at 1.0 — if the target is more likely than the draft predicted, always accept. `draw` is a uniform random number from `[0, 1)`.
+
+On acceptance, the output is the draft token. On rejection, the code computes an adjusted distribution: `target - draft`, clamped at zero and renormalized. This is the key insight from the speculative decoding paper — sampling from `max(0, target - draft)` on rejection ensures the combined accept/reject procedure produces samples from the exact target distribution. `torch.multinomial` draws one sample from this adjusted distribution.
 
 The two histograms are compared with a chi-squared test. Only bins with expected count > 5 are included (standard practice to avoid inflated χ² from sparse bins). The test runs three independent seeds and requires at least two to pass at p > 0.01, tolerating the inherent ~1% false-positive rate of the chi-squared test.
 
@@ -249,7 +287,9 @@ expected_cache_len = cache_len_before + 1 + accept_count
 actual_cache_len = trimmed[0][0][0].shape[1]
 ```
 
-Both the shape and the logits are checked. A trim that keeps the right number of positions but with corrupted values would pass the shape check and fail the logit comparison.
+`new_kvs` is the full cache after the verify forward pass — it contains KV entries for the prompt, 2 decoded tokens, the verify token, and all 4 candidates. `_trim_kv_cache` slices each KV tensor to keep only the first `cache_len_before + 1 + accept_count` positions. `cache_len_before` is the cache length before the verify step (prompt + 2 decoded). `1 + accept_count` accounts for the verify token itself plus the accepted candidates. The rejected candidates' KV entries are discarded.
+
+The shape check verifies the trim cut at the right position. But shape alone is insufficient — if `_trim_kv_cache` kept the right number of positions but with corrupted values (e.g., from an off-by-one in the slice indices), the shape would pass while the logits would fail. That is why the test also decodes one more token from the trimmed cache and compares against a full recompute.
 
 ---
 
@@ -267,6 +307,8 @@ for prev in range(0, 20, 5):
         s = tri_big.get_probs(prev, cur).sum().item()
         assert abs(s - 1.0) < 1e-5
 ```
+
+`get_probs(prev, cur)` returns a tensor of shape `(vocab_size,)` — the trigram model's probability distribution over the next token given the two-token context `(prev, cur)`. The loop samples every 5th token pair (`range(0, 20, 5)`) to cover a representative grid without testing all 400 combinations. `.sum().item()` should equal 1.0 for any valid probability distribution. The tolerance `1e-5` accommodates floating-point rounding from the Laplace smoothing and normalization arithmetic.
 
 This catches Laplace smoothing bugs, normalization errors after temperature scaling, and accidental mutations to the probability tables during sampling.
 
@@ -288,6 +330,14 @@ for start in range(0, prompt_len, chunk_size):
     pos = torch.arange(start, end, device=device).unsqueeze(0)
     logits_chunked, _, kvs_chunked = model(chunk, pos=pos, past_kvs=kvs_chunked)
 ```
+
+The full prefill is straightforward: feed the entire prompt tensor and get logits + KV cache in one pass.
+
+The chunked path iterates in steps of `chunk_size` (4 tokens). `range(0, prompt_len, chunk_size)` generates chunk starts: 0, 4, 8, 12. `end = min(start + chunk_size, prompt_len)` handles the last chunk which may be shorter than `chunk_size` (e.g., if `prompt_len = 14`, the last chunk is positions 12–13, only 2 tokens).
+
+`pos = torch.arange(start, end)` gives each chunk token its correct *absolute* position. This is critical: position 8 is position 8 regardless of which chunk it arrives in. If positions were computed relative to the chunk (0, 1, 2, 3 every time), the model's positional embeddings would be wrong and the test would fail.
+
+`past_kvs=kvs_chunked` passes the accumulated cache from previous chunks. On the first chunk, `kvs_chunked` is `None` (no cache). On subsequent chunks, the model concatenates the new chunk's KV entries onto the existing cache.
 
 Three properties are verified:
 
@@ -318,7 +368,11 @@ The most complex equivalence test. Interleaved scheduling packs a decode token a
 fused_ids = torch.zeros((2, t_max), dtype=torch.long, device=device)
 fused_ids[0, -1] = second_a            # decode token at last position
 fused_ids[1, :chunk_size] = b_chunk     # prefill chunk
+```
 
+`t_max` is the maximum sequence length across the two rows — equal to `chunk_size` since the prefill chunk is longer than the single decode token. `fused_ids` is initialized to zeros (pad tokens). Row 0 places the decode token at position `-1` (the last column), left-padding the rest with zeros. Row 1 places the prefill chunk starting at position 0, filling `chunk_size` positions.
+
+```python
 # Attention mask
 attn_mask = torch.zeros((2, 1, cache_len_a), dtype=torch.bool, device=device)
 attn_mask[0, :, :] = True   # A can see its entire cache
@@ -329,6 +383,12 @@ input_mask = torch.zeros((2, t_max), dtype=torch.bool, device=device)
 input_mask[0, -1] = True               # only last position is real for decode
 input_mask[1, :chunk_size] = True       # first chunk_size positions are real for prefill
 ```
+
+Three masks control isolation between the two rows:
+
+**`attn_mask`** has shape `(2, 1, cache_len_a)` — it controls which cached KV positions each row can attend to. Row 0 (A) sets all positions to `True` because A has a real cache it needs to attend to. Row 1 (B) stays `False` everywhere because B has no cached history — it is starting fresh.
+
+**`input_mask`** has shape `(2, t_max)` — it marks which input positions contain real tokens vs. padding. Row 0 marks only the last position as real (the decode token). Row 1 marks the first `chunk_size` positions as real. This prevents the model from computing meaningful output at padded positions and, critically, prevents padded positions from corrupting the softmax in self-attention.
 
 Both rows' logits are compared against their sequential counterparts. A's decode logits are at position `t_max - 1` (the last column, where the real token lives). B's prefill logits are at position `chunk_size - 1` (the last real prefill position).
 
