@@ -1,7 +1,7 @@
 ---
 layout: post
-title: "Correctness Tests for an Inference Engine"
-date: 2026-06-07
+title: "NanoGPT - Correctness Tests for an Inference Engine"
+date: 2026-06-08
 ---
 
 Performance optimizations are easy to benchmark and easy to get wrong. A KV cache that silently drops a position. A batching path that transposes logits. A speculative decoder that accepts one too many tokens. These bugs produce plausible-looking output with slightly different distributions — the kind of divergence that throughput numbers never catch.
