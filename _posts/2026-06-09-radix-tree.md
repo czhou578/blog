@@ -16,7 +16,7 @@ Let's look at the numbers first, then I'll walk through how the tree works.
 
 Here's the summary across six benchmark scenarios:
 
-| Scenario | Requests | Prompt Tok | Flat Cached | Radix Cached | Flat Hit Rate | Radix Hit Rate | Flat Throughput | Radix Throughput | Flat Evictions | Radix Evictions |
+| Scenario | Requests | Prompt Tok | Flat Cached Tok | Radix Cached Tok | Flat Hit Rate | Radix Hit Rate | Flat Throughput | Radix Throughput | Flat Evictions | Radix Evictions |
 |---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
 | `shared_prefix_basic` | 8 | 192 | 112 | 112 | 77.8% | 87.5% | 0.94x | **1.02x** | 0 | 0 |
 | `high_reuse_many_requests` | 24 | 672 | 552 | 552 | 85.2% | 95.8% | 0.77x | 0.82x | 0 | 0 |
@@ -55,6 +55,38 @@ The flat map doesn't know that hash_0 through hash_2 form a shared trunk that bo
 ## The radix tree
 
 The fix is to make the prefix structure explicit. A radix tree (compressed trie) stores token sequences as paths from root to leaf. Shared prefixes are shared edges — stored once, referenced by all requests that pass through them.
+
+### A concrete example: multi-turn conversation
+
+To see why this matters, let's walk through a multi-turn conversation and watch the tree evolve step by step.
+
+**Turn 1 — initial prompt.** A user sends: `"You are a helpful assistant. What is a radix tree?"` The tokenized prompt is `[101, 202, 303, 404, 505, 606, 707, 808]`. After prefill, the tree has one path:
+
+```
+ROOT
+ └─ [101, 202, 303, 404, 505, 606, 707, 808]   ← KV for positions 0–7
+```
+
+**Turn 2 — first follow-up.** The user asks: `"Give me a code example."` The full prompt is the original 8 tokens plus the follow-up tokens `[909, 110, 211, 312]`. The tree matches the first 8 tokens from the cache (skipping all of that prefill work), then inserts the new suffix:
+
+```
+ROOT
+ └─ [101, 202, 303, 404, 505, 606, 707, 808]   ← shared trunk (cached)
+      └─ [909, 110, 211, 312]                    ← follow-up A
+```
+
+**Turn 3 — second follow-up (branching).** The user goes back and asks a different question instead: `"How does it compare to a trie?"` This shares the same 8-token trunk but has different follow-up tokens `[413, 514, 615, 716]`. The tree matches the trunk again, then creates a second branch:
+
+```
+ROOT
+ └─ [101, 202, 303, 404, 505, 606, 707, 808]   ← shared trunk (cached, 2 dependents)
+      ├─ [909, 110, 211, 312]                    ← follow-up A
+      └─ [413, 514, 615, 716]                    ← follow-up B
+```
+
+The trunk's KV data is stored **once** and reused by both branches. If memory gets tight, the eviction policy can remove either leaf without affecting the shared trunk — the interior node is structurally protected.
+
+Now imagine a flat cache holding the same data. It has 12 independent hash entries with no knowledge that entries 0–7 form a shared prefix. Evicting any one of them orphans everything downstream. The radix tree makes this impossible by construction.
 
 Here's the node structure:
 
@@ -99,9 +131,73 @@ After:  root → [10, 20] (new mid-node B, KV for positions 0-1)
                    → [50, 60] (new node C, KV for positions 2-3 of new sequence)
 ```
 
-The split creates a new mid-node with the matched prefix, shortens the old child to the unmatched suffix, and divides the KV tensors between them using `.clone()` (to avoid shared tensor storage corruption). There's a subtle invariant here: if the old child was pinned (`lock_ref > 0`), the new mid-node has to inherit the lock count. Otherwise an active request's prefix path could get evicted mid-generation.
+The split creates a new mid-node with the matched prefix, shortens the old child to the unmatched suffix, and divides the KV tensors between them. Each key and value tensor is stored in `kv_data` with shape `(1, num_tokens, head_dim)`. Since the sequence length (number of tokens) is the second dimension (`dim=1`), we split them by slicing along that dimension using `.clone()` (to avoid shared tensor storage corruption).
 
-I got this wrong the first time — I had the KV slice assignments swapped between the mid-node and the old child. The mid-node should get `k[:, :split_len, :]` (the first half) and the old child should get `k[:, split_len:, :]` (the second half). Getting this backwards produces silent data corruption: the model gets KV entries from the wrong positions and generates garbage, but nothing crashes.
+The mid-node gets the first half `k[:, :split_len, :]`, and the old child gets the second half `k[:, split_len:, :]`. 
+
+There's also a subtle invariant: if the old child was pinned (`lock_ref > 0`), the new mid-node must inherit that lock count. Otherwise, an active request's prefix path could get evicted mid-generation.
+
+Here is the implementation of `_split_node` and the subsequent `insert` routine:
+
+```python
+def _split_node(self, child: RadixNode, split_len: int) -> RadixNode:
+    """Split child's edge at position split_len. Returns the new mid-node."""
+    new_mid = RadixNode()
+    new_mid.token_ids = child.token_ids[:split_len]
+    new_mid.parent = child.parent
+    new_mid.last_access_time = child.last_access_time
+    new_mid.lock_ref = child.lock_ref  # Inherit lock reference count
+
+    if child.kv_data is not None:
+        new_mid.kv_data = {}
+        new_child_kv = {}
+
+        # Divide the KV tensors along dim=1 (the sequence/token dimension)
+        for (layer, head), (k, v) in child.kv_data.items():
+            new_mid.kv_data[(layer, head)] = (
+                k[:, :split_len, :].clone(),
+                v[:, :split_len, :].clone()
+            )
+            new_child_kv[(layer, head)] = (
+                k[:, split_len:, :].clone(),
+                v[:, split_len:, :].clone()
+            )
+        child.kv_data = new_child_kv
+
+    suffix_tokens = child.token_ids[split_len:]
+    child.token_ids = suffix_tokens
+    child.parent = new_mid
+
+    new_mid.children[suffix_tokens[0]] = child
+    new_mid.parent.children[new_mid.token_ids[0]] = new_mid
+    
+    return new_mid
+
+def insert(self, token_ids: List[int], kv_data_full: Dict, block_size: int):
+    """Insert token_ids and their KV data into the tree."""
+    node, matched = self.match_prefix(token_ids)
+
+    if matched == len(token_ids): 
+        return
+
+    remaining = token_ids[matched:]
+    new_node = RadixNode()
+    new_node.token_ids = tuple(remaining)
+    new_node.parent = node
+    new_node.last_access_time = self.step
+    new_node.kv_data = {}
+
+    # Slice the newly generated KV tensors starting from the matched prefix end
+    for (layer, head), (k, v) in kv_data_full.items():
+        new_node.kv_data[(layer, head)] = (
+            k[:, matched:matched + len(remaining)].clone(),
+            v[:, matched:matched + len(remaining)].clone()
+        )
+    
+    node.children[remaining[0]] = new_node
+```
+
+I got the KV slicing assignments swapped the first time. Getting this backwards produces silent data corruption: the model gets KV entries from the wrong positions and generates garbage, but nothing crashes. Using `.clone()` on the sliced tensors is critical to avoid shared storage issues when the tensors are mutated downstream.
 
 ### Leaf-first eviction
 
@@ -112,6 +208,33 @@ This is the radix tree's killer feature. The eviction rule is:
 1. Only evict **leaf nodes** (no children)
 2. Only evict **unlocked nodes** (`lock_ref == 0`)
 3. Among eligible leaves, pick the **oldest** (LRU by `last_access_time`)
+
+Here's the implementation:
+
+```python
+def evict_lru(self) -> bool:
+    """Evict the least-recently-used unlocked leaf node."""
+    leaves = []
+    self._find_leaves(self.root, leaves)
+    
+    # Filter to eligible leaves (not locked, and not the root)
+    candidates = [n for n in leaves if n.lock_ref == 0 and n != self.root]
+    if not candidates:
+        return False  # nothing to evict
+    
+    # Find the oldest leaf node
+    victim = min(candidates, key=lambda n: n.last_access_time)
+    
+    # Prune it from the parent
+    parent = victim.parent
+    del parent.children[victim.token_ids[0]]
+    
+    # Free memory
+    victim.kv_data = None
+    victim.parent = None
+    
+    return True
+```
 
 The structural guarantee: an interior node (shared prefix) **cannot be evicted** while it still has children depending on it. The tree topology prevents orphaned blocks by construction. This is why the eviction pressure benchmark shows 0 evictions for the radix tree — interior nodes are protected.
 
@@ -124,23 +247,51 @@ When a request loads KV data from the tree, every node along the matched path ge
 ```python
 def load_from_radix_tree(request, tree, prompt_tokens, block_size):
     """Load cached KV from the radix tree onto a request."""
-    matched_nodes = tree.match_prefix(prompt_tokens)
-    
+    node, matched = tree.match_prefix(prompt_tokens)
+
+    if matched == 0: 
+        return 0
+
+    # Walk up parent pointers from matched node to assemble the full path
+    prefix_path = []
+    curr = node
+    while curr != tree.root:
+        prefix_path.append(curr)
+        curr = curr.parent
+    prefix_path.reverse()
+
+    # Concatenate the KV tensors along dim=1 (the sequence/token dimension)
+    # The shape of each KV tensor is (1, num_tokens, head_dim)
+    for (layer, head) in prefix_path[0].kv_data.keys():
+        new_k, new_v = [], []
+        for pnode in prefix_path:
+            pk, pv = pnode.kv_data[(layer, head)]
+            new_k.append(pk.clone())
+            new_v.append(pv.clone())
+            
+        request.kv_cache[(layer, head)] = (
+            torch.cat(new_k, dim=1),
+            torch.cat(new_v, dim=1),
+        )
+
     # Pin every node along the matched path
-    for node in matched_nodes:
-        node.lock_ref += 1
-    request._radix_path = matched_nodes
+    for pnode in prefix_path:
+        pnode.lock_ref += 1        
     
-    # Build KV cache by concatenating along the path
-    if matched_nodes:
-        for (layer, head) in matched_nodes[0].kv_data:
-            k_parts = [n.kv_data[(layer, head)][0] for n in matched_nodes]
-            v_parts = [n.kv_data[(layer, head)][1] for n in matched_nodes]
-            request.kv_cache[(layer, head)] = (
-                torch.cat(k_parts, dim=1),
-                torch.cat(v_parts, dim=1),
-            )
-        request.prefill_cursor = sum(len(n.token_ids) for n in matched_nodes)
+    # Snap to block boundary for prefill_cursor
+    num_cached = (matched // block_size) * block_size
+    request.prefill_cursor = num_cached
+    request._radix_path = prefix_path  # Save path for later unlocking
+    return num_cached
+
+def unlock_radix_path(self, request):
+    """Release the tree locks acquired during load_from_radix_tree."""
+    path = getattr(request, '_radix_path', None)
+    if path is None:
+        return
+    for node in path:
+        node.lock_ref -= 1
+    request._radix_path = None
 ```
 
 This is the same mechanism SGLang calls `inc_lock_ref` / `dec_lock_ref` in production. Without it, the eviction logic could free nodes that an active request's KV cache is currently pointing to.
