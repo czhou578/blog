@@ -4,7 +4,7 @@ title: "NanoGPT - Radix Tree Prefix Caching"
 date: 2026-06-09
 ---
 
-In the [previous post](/blog/2026/05/17/adding-scheduling), we built a hash-chained prefix cache — a flat map of `(parent_hash, token_ids) → KV block` that lets requests skip redundant prefill work when they share a common prompt prefix. It works, but it has a pretty fundamental limitation: it doesn't know what a *tree* is.
+In the [previous post](/blog/2026/05/22/prefix-caching), we built a hash-chained prefix cache — a flat map of `(parent_hash, token_ids) → KV block` that lets requests skip redundant prefill work when they share a common prompt prefix. It works, but it has a pretty fundamental limitation: it doesn't know what a *tree* is.
 
 Consider a multi-turn conversation where a user asks two follow-up questions branching off the same context. The flat cache stores each block independently with MD5 hashes. It has no idea that blocks 0, 1, and 2 form a shared trunk that both branches depend on. So when memory gets tight, the LRU eviction policy might evict block 1 — silently orphaning everything downstream and making the cache useless.
 
