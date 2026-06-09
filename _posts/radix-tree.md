@@ -31,6 +31,8 @@ I should note: both caching strategies are actually *slower* than no caching in 
 
 ## Why the flat cache breaks down
 
+![Flat Hash Cache vs Radix Tree]({{ site.baseurl }}/images/radix_flat_vs_tree.png)
+
 The flat hash map has three structural problems that become obvious once you think about trees:
 
 **No branching visibility.** The cache stores blocks independently. Given a block hash, you can't ask "what sequences extend this prefix?" Each block is an island.
@@ -84,6 +86,8 @@ When we find a match, we collect KV data from every node along the path. The req
 
 ### Splitting nodes — the tricky part
 
+![Radix Tree Node Splitting]({{ site.baseurl }}/images/radix_node_splitting.png)
+
 This is where things get interesting. When a new sequence partially matches an existing edge, the edge has to be split:
 
 ```
@@ -100,6 +104,8 @@ The split creates a new mid-node with the matched prefix, shortens the old child
 I got this wrong the first time — I had the KV slice assignments swapped between the mid-node and the old child. The mid-node should get `k[:, :split_len, :]` (the first half) and the old child should get `k[:, split_len:, :]` (the second half). Getting this backwards produces silent data corruption: the model gets KV entries from the wrong positions and generates garbage, but nothing crashes.
 
 ### Leaf-first eviction
+
+![Leaf-first LRU Eviction in a Radix Tree]({{ site.baseurl }}/images/radix_leaf_eviction.png)
 
 This is the radix tree's killer feature. The eviction rule is:
 
