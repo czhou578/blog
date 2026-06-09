@@ -14,6 +14,8 @@ Let's look at the numbers first, then I'll walk through how the tree works.
 
 ## Results
 
+![Radix Tree Prefix Caching Benchmark Results]({{ site.baseurl }}/images/radix_tree_benchmark.png)
+
 Here's the summary across six benchmark scenarios:
 
 | Scenario | Requests | Prompt Tok | Flat Cached Tok | Radix Cached Tok | Flat Hit Rate | Radix Hit Rate | Flat Throughput | Radix Throughput | Flat Evictions | Radix Evictions |
