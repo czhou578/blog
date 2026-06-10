@@ -7,13 +7,13 @@ image: https://czhou578.github.io/blog/images/server_architecture.png
 
 Up until now, the NanoGPT inference engine has been a Python function that you call from the same process. You pass in a list of `Request` objects, call `scheduled_generate()`, and it runs the scheduler loop until all requests are done. That's fine for benchmarking and correctness tests, but it's not how anyone actually uses an LLM.
 
-In production, inference servers expose an HTTP API. Clients send prompts, and the server streams tokens back as they're generated. The client doesn't wait for the full response — each token arrives over the wire as soon as it's produced. This is Server-Sent Events (SSE), and it's what makes ChatGPT's typing animation work.
+In production, inference servers expose an HTTP API. Clients send prompts, and the server streams tokens back as they're generated. The client doesn't wait for the full response — each token arrives over the wire as soon as it's produced. These are Server-Sent Events (SSE), and it's what makes ChatGPT's typing animation work on the frontend console.
 
-This post adds a streaming HTTP server to our NanoGPT inference engine. The server takes our existing scheduler, radix tree, chunked prefill, and continuous batching machinery and wraps it in a FastAPI application that accepts concurrent requests over HTTP and streams tokens back in real-time.
+This post adds a streaming HTTP server to our NanoGPT inference engine. The server takes our existing scheduler, radix tree, chunked prefill, and continuous batching code and wraps it in a FastAPI application that accepts concurrent requests over HTTP and streams tokens back in real-time.
 
 ![Streaming Inference Server Architecture]({{ site.baseurl }}/images/server_architecture.png)
 
-The interesting part isn't FastAPI itself: that's just plumbing. The interesting part is the **threading boundary** between the async HTTP layer and the synchronous inference loop, and how we pipe tokens from PyTorch back to curl.
+The interesting part is the **threading boundary** between the async HTTP layer and the synchronous inference loop, and how we pipe tokens from PyTorch back to curl.
 
 ## The problem: two incompatible execution models
 
@@ -21,11 +21,11 @@ Our inference engine runs a tight synchronous loop: call `scheduler.schedule()`,
 
 But HTTP servers need to be asynchronous. When a client sends a request, the server can't block the entire process waiting for 50 tokens to be generated — other clients would be locked out. FastAPI uses `asyncio` for this: each request gets a coroutine that can yield control while waiting for data.
 
-These two models don't compose directly. You can't `await` a PyTorch forward pass, and you can't run `asyncio` inside a blocking inference loop. The solution is to put them in separate threads and connect them with thread-safe queues.
+You can't `await` a PyTorch forward pass, and you can't run `asyncio` inside a blocking inference loop. The solution is to put them in separate threads and connect them with thread-safe queues.
 
 ## Loading the engine
 
-The first design decision: how does the server access the model and all the inference machinery (Scheduler, RadixTree, Request, etc.)?
+First, the server needs to load the model and all the inference machinery (Scheduler, RadixTree, etc.).
 
 ```python
 def _load_engine_module():
@@ -105,7 +105,7 @@ class InferenceEngine:
 
 There's a lot going on in this `__init__`, so let me walk through the design decisions:
 
-**`self.scheduler`** is a regular `Scheduler` instance — the same one we used in the benchmark scripts. It manages the waiting, prefilling, and active queues, and owns the radix tree for prefix caching. Nothing about the scheduler changes for the server — it's still a synchronous, single-threaded component.
+**`self.scheduler`** is a regular `Scheduler` instance; the same one we used in the benchmark scripts. It manages the waiting, prefilling, and active queues, and owns the radix tree for prefix caching. Nothing about the scheduler changes for the server — it's still a synchronous, single-threaded component.
 
 **`self._pending`** is the inbox. HTTP handlers write new requests here, and the engine thread reads from it. This is the crossing point between the two threads, which is why it has a `threading.Lock` guarding it. We use a plain list instead of `queue.Queue` because we want to drain all pending requests at once at the top of each engine loop iteration (batch drain), not pull them one at a time.
 
@@ -458,6 +458,6 @@ This server is intentionally minimal. A production inference server (vLLM, SGLan
 
 But the core architecture — background engine thread, asyncio queue bridge, SSE streaming — is the same pattern that production servers use. The complexity is in the optimizations, not the skeleton.
 
-You can find the full source code here: [https://github.com/czhou578/multimodal-inference-visualizer](https://github.com/czhou578/multimodal-inference-visualizer)
+You can find the full source code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/server.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/server.py)
 
 CZ
