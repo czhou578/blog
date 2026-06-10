@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "NanoGPT - Adding a Simple HTTP Server"
-date: 2026-06-09
+date: 2026-06-10
 image: https://czhou578.github.io/blog/images/server_architecture.png
 ---
 
