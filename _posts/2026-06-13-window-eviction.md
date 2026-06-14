@@ -2,6 +2,7 @@
 layout: post
 title: "NanoGPT: Sliding Window Eviction"
 date: 2026-06-13
+image: https://czhou578.github.io/blog/images/sliding_window_thumbnail.png
 ---
 
 <script type="module">
@@ -219,19 +220,7 @@ Eight requests under a fixed budget. Window = 16.
 
 The sliding window exploits a well-studied property of autoregressive transformers: attention weights decay roughly exponentially with distance. The model attends most strongly to the last few tokens and progressively less to older ones. Trimming the oldest entries removes the weakest contributions.
 
-<div class="mermaid">
-graph TD
-    subgraph "Full Cache — T=50"
-        F1["Positions 0–10: weak attention"]
-        F2["Positions 11–30: moderate attention"]
-        F3["Positions 31–50: strong attention"]
-    end
-    subgraph "Window=20"
-        W1["Positions 31–50: strong attention ✓"]
-    end
-
-    F3 -.-> W1
-</div>
+![Attention Weight Distribution]({{ site.baseurl }}/images/attention_decay_diagram.png)
 
 But this is an approximation, and there are cases where it breaks:
 
