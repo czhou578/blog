@@ -9,15 +9,15 @@ date: 2026-06-13
   mermaid.initialize({ startOnLoad: true });
 </script>
 
-Let me tell you about a bug I couldn't see for a long time. Not a bug in the code — the code was correct. A bug in the *design*.
+Let me tell you about a bug I couldn't see for a long time, a bug in the *design*.
 
 Our NanoGPT inference engine has a scheduler that manages multiple requests, a KV cache per request, continuous batching, chunked prefill, and a preemption mechanism that evicts the lowest-priority request when memory runs out. All of this works. The problem is what happens to the KV cache over time: it grows without bound.
 
-Every decode step, every active request appends one key-value pair per layer per head. A request generating 200 tokens accumulates 200 KV entries — even though, empirically, the attention distribution in autoregressive transformers is heavily skewed toward the most recent positions. The model might be attending almost exclusively to the last 20–30 tokens, but we're dutifully storing all 200 because "what if it needs them?"
+Every decode step & every active request appends one key-value pair per layer per head. A request generating 200 tokens accumulates 200 KV entries even though the attention distribution in autoregressive transformers is heavily skewed toward the most recent positions. The model might be attending almost exclusively to the last 20–30 tokens, but we're dutifully storing all 200 because "what if it needs them?"
 
-This is the kind of waste that doesn't show up in correctness tests. The outputs are fine. The generations are fine. You only notice it when you run three requests at once and the scheduler starts preempting perfectly good work because the memory budget ran out — not because the system is doing too much useful work, but because it's hoarding KV entries that contribute almost nothing to the attention computation.
+This is the kind of waste that doesn't show up in correctness tests. You only notice it when you run three requests at once and the scheduler starts preempting perfectly good work because the memory budget ran out — not because the system is doing too much useful work, but because it's hoarding KV entries that contribute almost nothing to the attention computation.
 
-The fix is called sliding window eviction, and it is — I am not exaggerating — about six lines of code that change the entire memory profile of the system.
+The fix is called sliding window eviction, and it is **about six lines of code** that change the entire memory profile of the system.
 
 ## What "unbounded growth" actually looks like
 
@@ -77,9 +77,9 @@ def evict_kv_cache(request, window_size):
 
 I want to walk through why every line is the way it is, because each one embeds a design choice that isn't obvious on first reading.
 
-**`k[:, -window_size:, :]`** — the negative index slice. We keep the *last* W entries, not the first. This is the right call because in autoregressive language models, recent tokens carry more information for next-token prediction than distant ones. The prompt tokens — which are the oldest entries in the cache — get evicted first. This aligns with how attention actually behaves: the attention weights follow a roughly exponential decay, attending strongly to the last few positions and weakly to distant ones.
+**`k[:, -window_size:, :]`** — the negative index slice. We keep the *last* W entries, not the first. This is because in autoregressive language models, recent tokens carry more information for next-token prediction than distant ones. The prompt tokens — which are the oldest entries in the cache — get evicted first. This aligns with how attention actually behaves: the attention weights follow a roughly exponential decay, attending strongly to the last few positions and weakly to distant ones.
 
-**The slice is a view, not a copy.** PyTorch tensor slicing doesn't allocate new memory. The slice `k[:, -window_size:, :]` returns a view into the same underlying storage. The old entries become unreachable and get garbage-collected. This means the eviction itself is essentially free — no tensor allocations, no copies, no GPU kernels. You're just updating a tuple of pointers.
+**The slice is a view, not a copy.** PyTorch tensor slicing doesn't allocate new memory. The slice `k[:, -window_size:, :]` returns a view into the same underlying storage. The old entries become unreachable and get garbage-collected. This means the eviction itself is essentially free, with no tensor allocations, copies, or GPU kernels. You're just updating a tuple of pointers.
 
 **We iterate over every `(layer, head)` pair.** In our implementation, each request stores its KV cache as a dict keyed by `(layer_idx, head_idx)`, with each value being a `(key_tensor, value_tensor)` tuple of shape `(1, T, head_size)`. A model with 4 layers and 4 heads has 16 entries to trim. This is where you start to see the cost of storing actual tensors on the request (as opposed to pool indices, which is what vLLM and SGLang do), but at our model's scale the iteration is negligible.
 
@@ -114,9 +114,9 @@ if decode_reqs:
         req._last_token = idx_next[i : i + 1]
 ```
 
-The placement is deliberate: we evict *after* the model has used the full cache for this step's attention, but *before* the next step. The current step already paid the cost of assembling and attending over the full cache — evicting before the forward pass would require re-padding the batch (since different requests might have different post-eviction lengths), adding complexity for no benefit. Evicting after the forward pass is simpler and produces the same result for the next step.
+The placement is deliberate: we evict *after* the model has used the full cache for this step's attention, but *before* the next step. The current step already paid the cost of assembling and attending over the full cache. Evicting before the forward pass would require re-padding the batch (since different requests might have different post-eviction lengths), adding complexity for no benefit. Evicting after the forward pass is simpler and produces the same result for the next step.
 
-This means there's a one-step lag: the model sees up to `W + 1` entries during attention (the window plus the freshly appended token), and we trim back to `W` after. In practice this doesn't matter. But it's worth being precise about.
+This means there's a one-step lag: the model sees up to `W + 1` entries during attention (the window plus the freshly appended token), and we trim back to `W` after. In practice this doesn't matter, but it's worth being precise about.
 
 ## The scheduler has to agree
 
@@ -245,13 +245,13 @@ For production systems, Mistral addresses this architecturally: they bake the wi
 
 ## The deeper point
 
-I think what's interesting about the sliding window isn't the implementation — it's six lines of Python, the idea is obvious in hindsight. What's interesting is how it exposes the tension between two different ways of thinking about the KV cache.
+I think what's interesting about the sliding window isn't the implementation but how it exposes the tension between two different ways of thinking about the KV cache.
 
-One way is to think of it as a *correctness* mechanism: the cache stores the exact state the model needs to produce the right output, and any modification is a source of error. Under this view, eviction is always bad — you're deleting information the model might need.
+One way is to think of it as a *correctness* mechanism: the cache stores the exact state the model needs to produce the right output, and any modification is a source of error. Under this view, eviction is always bad; you're deleting information the model might need.
 
 The other way is to think of it as a *resource* that has a cost. Every cached entry consumes memory that could be used for another request. If an entry contributes 0.1% to the next token's probability distribution, keeping it costs real memory and provides nearly zero benefit. Under this view, eviction is a resource allocation decision: trade a tiny quality loss for a measurable throughput gain.
 
-The scheduler we built in previous posts already makes this tradeoff implicitly — preemption is eviction, just at the granularity of entire requests instead of individual KV entries. The sliding window makes the same tradeoff at a finer granularity. Instead of evicting a whole request when memory runs out, we continuously trim every request's cache to a fixed budget, preventing the memory crisis from happening in the first place.
+The scheduler we built in previous posts already makes this tradeoff implicitly (preemption is eviction, just at the granularity of entire requests instead of individual KV entries). The sliding window makes the same tradeoff at a finer granularity. Instead of evicting a whole request when memory runs out, we continuously trim every request's cache to a fixed budget, preventing the memory crisis from happening in the first place.
 
 This is the same progression you see in real systems: vLLM's PagedAttention manages memory at the block level, SGLang's RadixCache manages it at the node level, and Mistral's sliding window attention manages it at the token level. Each is a different answer to the same question: how do you spend a fixed memory budget to serve the most requests at the best quality?
 
@@ -259,6 +259,6 @@ Our implementation answers it in the simplest possible way — a hard window wit
 
 And the benchmarks say that's enough to cut peak memory by 36–46% and boost throughput by 18–21%. Sometimes the simplest version of an idea is the one worth shipping.
 
-The full code can be found here: [https://github.com/czhou578/multimodal-inference-visualizer](https://github.com/czhou578/multimodal-inference-visualizer)
+The full code can be found here: [https://github.com/czhou578/nanoGPT-inference/blob/main/nanogpt-sliding-window.py](https://github.com/czhou578/nanoGPT-inference/blob/main/nanogpt-sliding-window.py)
 
 CZ
