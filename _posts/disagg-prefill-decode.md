@@ -4,19 +4,19 @@ title: "NanoGPT: Disaggregated Prefill and Decode"
 date: 2026-06-16
 ---
 
-# Disaggregated Prefill: Splitting the Inference Pipeline in NanoGPT
+In the [previous post](/blog/2026/06/13/window-eviction), we added sliding window eviction to cap KV cache memory per request. That post ended with a line about how the scheduler already makes a tradeoff between quality and throughput — evicting KV entries that contribute almost nothing to the attention computation. This post is about a different kind of interference, one that no amount of eviction can fix.
 
-Every LLM inference request goes through two fundamentally different computational phases. The first — **prefill** — ingests the entire prompt in a single dense forward pass, saturating FLOPs with high arithmetic intensity. The second — **decode** — generates tokens one at a time, fetching the entire KV cache from memory for each new token. Prefill is compute-bound. Decode is memory-bandwidth-bound.
+The problem is that prefill and decode want completely different things from the hardware. Prefill ingests the entire prompt in a single dense forward pass — high arithmetic intensity, lots of FLOPs, compute-bound. Decode generates tokens one at a time, fetching the entire KV cache from memory for each new token — memory-bandwidth-bound, very little compute per byte moved. In our monolithic scheduler from the [interleaving post](/blog/2026/05/29/interleave), these two phases share the same thread and the same `model()` call. While prefill is crunching through a long prompt, decode requests sit idle. While decode is streaming one-token-at-a-time, the GPU's compute units are underutilized.
 
-In a monolithic inference engine, these two phases share the same device, the same thread, and the same scheduler step. While prefill is crunching through a long prompt, decode requests sit idle. While decode is streaming one-token-at-a-time, the GPU's compute units are underutilized. They interfere with each other because they have entirely different hardware profiles competing for the same resources.
+I'd been reading about how vLLM and DeepSeek handle this in production — they run prefill and decode on separate GPU instances, with a KV cache transfer protocol between them. The idea is called **disaggregated prefill**, and I wanted to understand it from first principles by building it in NanoGPT.
 
-**Disaggregated prefill** eliminates this interference by splitting prefill and decode into separate workers. In production systems like vLLM's P/D disaggregation and DeepSeek's architecture, these workers run on separate GPU instances. I wanted to understand this pattern from first principles, so I implemented it in my NanoGPT inference engine using Python threads and a KV cache handoff protocol.
+The constraint: we only have one device. So instead of separate GPUs, I used Python threads and a queue-based KV handoff protocol. The architectural boundary is the same — prefill and decode are independent workers that communicate through a well-defined contract — the physical separation is just smaller.
 
 ---
 
-## The Architecture
+## The three pieces
 
-The design splits the engine into three components connected by thread-safe queues:
+The design has three components connected by thread-safe queues:
 
 ```
                      ┌─────────────────────────┐
@@ -48,13 +48,13 @@ The design splits the engine into three components connected by thread-safe queu
                      └───────────────────────────┘
 ```
 
-Both workers share the **same model object**. This works because PyTorch releases the GIL during tensor operations, the model weights are read-only in `eval()` mode, and each thread creates its own intermediate tensors. In production, each worker would have its own GPU and model replica — the shared-model approach simulates the same architectural boundary without requiring multiple devices.
+Both workers share the **same model object**. This sounds dangerous, but it works because PyTorch releases the GIL during tensor operations, the model weights are read-only in `eval()` mode, and each thread creates its own intermediate tensors. In production, each worker would have its own GPU and model replica — the shared-model approach simulates the same architectural boundary without requiring multiple devices.
 
 ---
 
-## The KV Transfer Protocol
+## The handoff contract
 
-The critical design problem is: how does the prefill worker hand off state to the decode worker? I defined a `KVTransfer` dataclass as the contract between them:
+The critical design question is: what exactly does the prefill worker hand to the decode worker? I defined a `KVTransfer` dataclass as the contract between them:
 
 ```python
 @dataclass
@@ -68,13 +68,15 @@ class KVTransfer:
     prefill_time_ms: float       # for latency tracking
 ```
 
-The KV cache is a dictionary keyed by `(layer_index, head_index)`, with each value being a `(key_tensor, value_tensor)` pair. The prefill worker clones these tensors before putting them on the queue — in a real multi-GPU system, this clone would be a network transfer (NCCL, RDMA), but the semantic boundary is the same. The decode worker should not assume it can reach into the prefill worker's memory.
+I want to walk through a few design choices here because they weren't obvious to me at first.
 
-Including `first_token_id` in the transfer is a subtle but important detail. The prefill worker doesn't just compute the KV cache — it also samples the first output token from the last-position logits. This means the decode worker can immediately begin generating from the *second* token, with the request already carrying one generated token.
+The KV cache is a dictionary keyed by `(layer_index, head_index)`, with each value being a `(key_tensor, value_tensor)` pair — same representation we've been using since the [KV cache post](/blog/2026/05/10/adding-kv-cache-to-nanogpt). The prefill worker `.clone()`s these tensors before putting them on the queue. In a real multi-GPU system, this clone would be a network transfer (NCCL, RDMA), but the semantic boundary is the same: the decode worker should not assume it can reach into the prefill worker's memory.
+
+Including `first_token_id` in the transfer is a subtle but important detail. The prefill worker doesn't just compute the KV cache — it also samples the first output token from the last-position logits. This means the decode worker can immediately begin generating from the *second* token, with the request already carrying one generated token. I initially had the decode worker re-computing logits from the transferred KV cache to get the first token, which was wasteful — the prefill worker already has those logits sitting right there.
 
 ---
 
-## The Prefill Worker
+## The prefill worker
 
 The prefill worker is the simpler of the two — a tight loop that pulls requests from a queue and runs a full forward pass:
 
@@ -115,13 +117,15 @@ def prefill_worker(model, request_queue, kv_transfer_queue, stop_event):
             kv_transfer_queue.put(transfer)
 ```
 
-One key difference from the monolithic scheduler: there's **no chunking**. The prefill worker processes the entire prompt in a single forward pass because it doesn't share a token budget with decode. It can saturate its compute without throttling to leave room for decode tokens. This is one of the fundamental benefits of disaggregation.
+One key difference from the monolithic scheduler: there's **no chunking**. The prefill worker processes the entire prompt in a single forward pass because it doesn't share a token budget with decode. Remember how in the [chunked prefill post](/blog/2026/05/13/adding-chunked-prefill) we had to split long prompts into chunks to avoid starving decode requests? That constraint is gone. The prefill worker can saturate its compute without throttling to leave room for decode tokens. This is one of the fundamental benefits of disaggregation — you don't need chunked prefill when prefill has its own execution context.
+
+The `timeout=0.05` on `queue.get()` is a small detail worth mentioning. Without a timeout, the worker blocks indefinitely on an empty queue and the `stop_event` check never runs. With it, the worker wakes up every 50ms to check if it should shut down. In production you'd use something more sophisticated (condition variables, select-style polling), but for our purposes this is fine.
 
 ---
 
-## The Decode Worker
+## The decode worker
 
-The decode worker is a continuous batching loop — structurally almost identical to the monolithic scheduler's decode path, but sourcing pre-filled requests from the transfer queue instead of doing prefill itself:
+The decode worker is a continuous batching loop — structurally almost identical to the decode path in our [interleaving scheduler](/blog/2026/05/29/interleave), but sourcing pre-filled requests from the transfer queue instead of doing prefill itself:
 
 ```python
 def decode_worker(model, kv_transfer_queue, results_queue, stop_event,
@@ -184,9 +188,11 @@ def decode_worker(model, kv_transfer_queue, results_queue, stop_event,
             active_requests = still_active
 ```
 
-The decode worker **never runs a prefill forward pass**. It only performs the memory-bandwidth-bound single-token decode, using `assemble_batch_cache()` and `disassemble_batch_cache()` for left-padded batching across requests with different sequence lengths.
+The decode worker **never runs a prefill forward pass**. It only performs the memory-bandwidth-bound single-token decode, using `assemble_batch_cache()` and `disassemble_batch_cache()` — the same left-padded batching functions from the [continuous batching post](/blog/2026/05/11/adding-continuous-batching).
 
-The critical behavioral difference becomes visible in the telemetry logs. Where a monolithic scheduler alternates between prefill and decode within a single step:
+There's a detail in the request reconstruction that took me a minute to get right. When a `KVTransfer` arrives, the decode worker creates a fresh `Request` object, but it has to initialize it as if prefill already happened. That means setting `prefill_cursor = len(prompt_tokens)`, appending the `first_token_id` to `generated_tokens`, and stashing it in `_last_token` so the next decode step feeds it to the model. If you forget any of these, the request either re-prefills (wrong) or crashes on the position calculation (also wrong).
+
+The behavioral difference becomes visible in the logs. Where the monolithic scheduler alternates between prefill and decode within a single step:
 
 ```
 step 0: prefill req0 (30 tokens), decode batch=0
@@ -211,7 +217,7 @@ Prefill doesn't block decode. Decode doesn't wait for prefill. The decode batch 
 
 ---
 
-## The Coordinator
+## The coordinator
 
 The main thread ties everything together — create the workers, feed requests, collect results:
 
@@ -253,26 +259,24 @@ def disaggregated_generate(model, requests, max_batch_size=4):
     return requests
 ```
 
-The `stop_event` provides clean shutdown: the prefill worker exits its loop, and the decode worker finishes draining its active requests before terminating. No deadlocks, no orphaned threads.
+The `stop_event` provides clean shutdown: the prefill worker exits its loop, and the decode worker finishes draining its active requests before terminating. I initially tried just joining the threads without a stop event, and the prefill worker would hang on `request_queue.get()` forever — it didn't know there were no more requests coming. The event gives it a way to check "should I stop?" on every iteration.
 
 ---
 
-## Benchmark Results
+## What the benchmarks show
 
-To validate the architecture, I built a benchmark suite that compares the disaggregated engine against the monolithic chunked-prefill scheduler across six workload scenarios. Each scenario runs the same requests through both engines and measures wall time, throughput (gen tokens/s), time-to-first-token (TTFT), and average request latency.
+I built a benchmark suite that runs the same requests through both the monolithic chunked-prefill scheduler and the disaggregated engine, then compares wall time, throughput, TTFT, and average request latency. Six scenarios, each testing a different workload shape.
 
-Here are the headline numbers:
-
-### Smoke Test (4 requests, 16-token prompts, 8 new tokens)
+### Smoke test (4 requests, 16-token prompts, 8 new tokens)
 
 | Method | Wall (s) | Gen tok/s | Avg TTFT (ms) | Avg Latency (ms) |
 |--------|----------|-----------|---------------|-------------------|
 | Monolithic | 0.036 | 894 | 11.32 | 30.34 |
 | Disaggregated | 0.060 | 534 | 10.11 | 29.01 |
 
-At this trivially small scale, disaggregation is **slower** (0.60x throughput). The threading overhead — queue puts/gets, thread synchronization, `time.sleep()` polls — dominates when there are only 4 requests with 16-token prompts. This is expected and important to acknowledge.
+At this trivially small scale, disaggregation is **slower** (0.60x throughput). The threading overhead — queue puts/gets, thread synchronization, `time.sleep()` polls — dominates when there are only 4 requests with 16-token prompts. This is the same lesson as the [radix tree benchmarks](/blog/2026/06/09/radix-tree): caching infrastructure has a fixed cost, and if the workload is too small, that cost exceeds the benefit.
 
-### Staggered Arrivals (8 requests, 24-token prompts, 10 new tokens)
+### Staggered arrivals (8 requests, 24-token prompts, 10 new tokens)
 
 | Method | Wall (s) | Gen tok/s | Avg TTFT (ms) | Avg Latency (ms) |
 |--------|----------|-----------|---------------|-------------------|
@@ -281,7 +285,7 @@ At this trivially small scale, disaggregation is **slower** (0.60x throughput). 
 
 Here the benefit materializes: **1.42x throughput**, **53% lower TTFT**, **43% lower latency**. With 8 staggered requests, the monolithic scheduler's head-of-line blocking becomes significant — later requests queue behind earlier prefills. The disaggregated engine processes prefills in parallel with ongoing decodes.
 
-### Long Prompts (6 requests, 40-token prompts, 8 new tokens)
+### Long prompts (6 requests, 40-token prompts, 8 new tokens)
 
 | Method | Wall (s) | Gen tok/s | Avg TTFT (ms) | Avg Latency (ms) |
 |--------|----------|-----------|---------------|-------------------|
@@ -290,7 +294,7 @@ Here the benefit materializes: **1.42x throughput**, **53% lower TTFT**, **43% l
 
 This is the **strongest result**: **1.62x throughput** and a **74% reduction in TTFT**. Long prompts amplify the prefill/decode interference because the monolithic scheduler must chunk the 40-token prompt across multiple steps, blocking decode during each prefill chunk. The disaggregated engine processes the full prompt in one shot on the prefill worker while the decode worker continues uninterrupted.
 
-### Long Decode (6 requests, 16-token prompts, 32 new tokens)
+### Long decode (6 requests, 16-token prompts, 32 new tokens)
 
 | Method | Wall (s) | Gen tok/s | Avg TTFT (ms) | Avg Latency (ms) |
 |--------|----------|-----------|---------------|-------------------|
@@ -299,7 +303,7 @@ This is the **strongest result**: **1.62x throughput** and a **74% reduction in 
 
 Moderate gains: **1.13x throughput**, **45% lower TTFT**. When decode dominates (32 new tokens per request), the decode worker is the bottleneck regardless of architecture. But TTFT still improves because requests enter the decode phase faster.
 
-### Stress Test (16 requests, 16-token prompts, 10 new tokens)
+### Stress test (16 requests, 16-token prompts, 10 new tokens)
 
 | Method | Wall (s) | Gen tok/s | Avg TTFT (ms) | Avg Latency (ms) |
 |--------|----------|-----------|---------------|-------------------|
@@ -308,7 +312,7 @@ Moderate gains: **1.13x throughput**, **45% lower TTFT**. When decode dominates 
 
 At scale: **1.04x throughput**, **27% lower TTFT**, **24% lower latency**. With 16 requests competing for a batch size of 4, both engines are admission-constrained. The disaggregated version still wins on latency because the prefill pipeline never blocks the decode pipeline.
 
-### Batch Pressure (12 requests, 16-token prompts, batch size 2)
+### Batch pressure (12 requests, 16-token prompts, batch size 2)
 
 | Method | Wall (s) | Gen tok/s | Avg TTFT (ms) | Avg Latency (ms) |
 |--------|----------|-----------|---------------|-------------------|
@@ -319,7 +323,7 @@ Near-parity throughput (0.98x) but still **17% lower TTFT** and **15% lower late
 
 ---
 
-## Summary of Results
+## The pattern across all six scenarios
 
 | Scenario | Throughput Ratio | TTFT Ratio | Latency Ratio |
 |----------|:---------------:|:----------:|:-------------:|
@@ -334,21 +338,21 @@ Near-parity throughput (0.98x) but still **17% lower TTFT** and **15% lower late
 
 The pattern is clear: **disaggregation shines when prefill is expensive relative to decode**. The `long_prompts` scenario — where 40-token prompts would require multiple chunked-prefill steps in the monolithic scheduler — shows a 74% TTFT reduction. The `smoke_test` scenario — where prompts are tiny and the overhead of threading dominates — shows disaggregation is slightly worse.
 
-This matches the production intuition perfectly. vLLM and DeepSeek deploy disaggregated prefill on workloads with long context windows (32K+ tokens), where a single prefill can occupy a GPU for hundreds of milliseconds. On those workloads, the latency-sensitive decode requests absolutely cannot afford to be blocked behind prefill.
+This matches the production intuition. vLLM and DeepSeek deploy disaggregated prefill on workloads with long context windows (32K+ tokens), where a single prefill can occupy a GPU for hundreds of milliseconds. On those workloads, the latency-sensitive decode requests absolutely cannot afford to be blocked behind prefill.
 
 ---
 
-## A Note on Token Mismatches
+## A note on token mismatches
 
-The benchmark logs show `⚠ Req N: token mismatch (expected with different RNG consumption)` for every request. This might look alarming, but it's expected and well-understood.
+The benchmark logs show `⚠ Req N: token mismatch` for every request, which looked alarming until I thought about it for a minute.
 
 The monolithic and disaggregated engines consume PyTorch's random number generator in different orders. In the monolithic scheduler, prefill and decode interleave within a single thread, consuming RNG values in a deterministic but interleaved order. In the disaggregated version, the prefill and decode workers are in separate threads — the prefill worker might consume RNG for request 2's sampling before or after the decode worker consumes RNG for request 0's next token, depending on thread scheduling.
 
-Since the RNG sequences diverge after the first sample, the generated tokens are different — but both are valid samples from the model's distribution. The architectural pattern is correct; the tokens are just drawn from different points in the RNG stream. To verify true equivalence, you'd need to use either greedy decoding or per-request `torch.Generator` instances, which is a worthwhile extension but not necessary for validating the disaggregation pattern.
+Since the RNG sequences diverge after the first sample, the generated tokens are different — but both are valid samples from the model's distribution. This is the same issue you'd hit with any form of parallelism. To verify true equivalence, you'd need either greedy decoding or per-request `torch.Generator` instances — same idea as the [correctness test post](/blog/2026/06/08/correctness-test), just a different source of non-determinism.
 
 ---
 
-## Connection to Production Systems
+## How this maps to production
 
 | This Implementation | Production (vLLM P/D) |
 |----|-----|
@@ -361,12 +365,16 @@ Since the RNG sequences diverge after the first sample, the generated tokens are
 
 The architectural pattern is identical — the only difference is what the "boundary" between prefill and decode actually is. In this implementation, it's a Python `queue.Queue`. In production, it's a network link carrying serialized KV tensors between machines. The `KVTransfer` dataclass maps directly to the wire protocol.
 
-What this educational implementation *doesn't* capture is the memory management complexity of production disaggregation: KV cache pooling, tensor parallelism across the transfer, page-aligned block transfers, and the scheduling logic for balancing prefill and decode worker utilization. But the fundamental insight — that splitting these two fundamentally different computational phases into independent workers eliminates head-of-line blocking and improves tail latency — comes through clearly even at NanoGPT scale.
+What this educational implementation *doesn't* capture is the memory management complexity of production disaggregation: KV cache pooling (like what we [compared against SGLang](/blog/2026/06/12/sglang-compare)), tensor parallelism across the transfer, page-aligned block transfers, and the scheduling logic for balancing prefill and decode worker utilization. But the fundamental insight — that splitting these two fundamentally different computational phases into independent workers eliminates head-of-line blocking and improves tail latency — comes through clearly even at NanoGPT scale.
 
 ---
 
-## Key Takeaway
+## What I took away from this
 
-The model doesn't know anything about disaggregation. `model.forward()` is called identically whether it's running prefill or decode — it's just called from different threads with different inputs. All of the disaggregation complexity lives in the threading and queue orchestration above the model. The Transformer blocks, attention heads, `assemble_batch_cache()`, `disassemble_batch_cache()` — none of it changes.
+The model doesn't know anything about disaggregation. `model.forward()` is called identically whether it's running prefill or decode — it's just called from different threads with different inputs. The `Head` attention implementation, `assemble_batch_cache()`, `disassemble_batch_cache()` — none of it changes. All of the disaggregation complexity lives in the threading and queue orchestration above the model.
 
-This is the elegant part: disaggregated prefill is a **pure scheduling optimization**. It's not a model architecture change, not a kernel optimization, not a memory management change. It's recognizing that prefill and decode have different computational profiles and giving them separate execution contexts so they don't interfere with each other.
+This is the same pattern we've seen across every optimization in this series. Chunked prefill was a scheduling change — the model didn't change. Continuous batching was a scheduling change — the model didn't change. The radix tree was a caching change — the model didn't change. And now disaggregated prefill is a threading change — the model didn't change.
+
+Disaggregated prefill is a **pure scheduling optimization**. It's recognizing that prefill and decode have different computational profiles and giving them separate execution contexts so they don't interfere with each other. The elegant part is that you can layer it on top of everything we've already built without touching any of the layers below.
+
+CZ
