@@ -1,15 +1,5 @@
 ---
 layout: post
-<<<<<<< HEAD
-title: "NanoGPT: Disaggregated Prefill & Decode"
-date: 2026-06-14
----
-
-<script type="module">
-  import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
-  mermaid.initialize({ startOnLoad: true });
-</script>
-=======
 title: "NanoGPT: Disaggregated Prefill and Decode"
 date: 2026-06-16
 ---
@@ -388,4 +378,3 @@ This is the same pattern we've seen across every optimization in this series. Ch
 Disaggregated prefill is a **pure scheduling optimization**. It's recognizing that prefill and decode have different computational profiles and giving them separate execution contexts so they don't interfere with each other. The elegant part is that you can layer it on top of everything we've already built without touching any of the layers below.
 
 CZ
->>>>>>> 635ee44d4cb835f8ca2aee0d1d7739fed1311101
