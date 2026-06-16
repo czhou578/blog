@@ -343,14 +343,12 @@ The pattern is clear: **disaggregation shines when prefill is expensive relative
 
 This matches the production intuition. vLLM and DeepSeek deploy disaggregated prefill on workloads with long context windows (32K+ tokens), where a single prefill can occupy a GPU for hundreds of milliseconds. On those workloads, the latency-sensitive decode requests absolutely cannot afford to be blocked behind prefill.
 
----
 
 ## A note on token mismatches
 
 The benchmark logs show `⚠ Req N: token mismatch` for every request, which looked alarming until I thought about it.
 
 The monolithic and disaggregated engines consume PyTorch's random number generator in different orders. In the monolithic scheduler, prefill and decode interleave within a single thread, consuming RNG values in a deterministic but interleaved order. In the disaggregated version, the prefill and decode workers are in separate threads — the prefill worker might consume RNG for request 2's sampling before or after the decode worker consumes RNG for request 0's next token, depending on thread scheduling.
----
 
 ## How this maps to production
 
