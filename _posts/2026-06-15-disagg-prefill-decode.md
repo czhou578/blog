@@ -2,6 +2,7 @@
 layout: post
 title: "NanoGPT: Disaggregated Prefill and Decode"
 date: 2026-06-16
+image: https://czhou578.github.io/blog/images/disagg_prefill_decode_thumbnail.png
 ---
 
 In the [previous post](/blog/2026/06/13/window-eviction), we added sliding window eviction to cap KV cache memory per request. That post ended with a line about how the scheduler already makes a tradeoff between quality and throughput — evicting KV entries that contribute almost nothing to the attention computation. This post is about a different kind of interference, one that no amount of eviction can fix.
@@ -215,6 +216,8 @@ The disaggregated version shows the two phases running asynchronously:
 
 Prefill doesn't block decode. Decode doesn't wait for prefill. The decode batch grows smoothly as pre-filled requests arrive.
 
+![Scheduling Timeline Comparison]({{ site.baseurl }}/images/disagg_vs_monolithic_scheduling.png)
+
 ---
 
 ## The coordinator
@@ -347,8 +350,6 @@ This matches the production intuition. vLLM and DeepSeek deploy disaggregated pr
 The benchmark logs show `⚠ Req N: token mismatch` for every request, which looked alarming until I thought about it.
 
 The monolithic and disaggregated engines consume PyTorch's random number generator in different orders. In the monolithic scheduler, prefill and decode interleave within a single thread, consuming RNG values in a deterministic but interleaved order. In the disaggregated version, the prefill and decode workers are in separate threads — the prefill worker might consume RNG for request 2's sampling before or after the decode worker consumes RNG for request 0's next token, depending on thread scheduling.
-
-Since the RNG sequences diverge after the first sample, the generated tokens are different — but both are valid samples from the model's distribution. This is the same issue you'd hit with any form of parallelism.
 ---
 
 ## How this maps to production
