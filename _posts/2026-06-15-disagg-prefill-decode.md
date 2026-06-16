@@ -344,12 +344,11 @@ This matches the production intuition. vLLM and DeepSeek deploy disaggregated pr
 
 ## A note on token mismatches
 
-The benchmark logs show `⚠ Req N: token mismatch` for every request, which looked alarming until I thought about it for a minute.
+The benchmark logs show `⚠ Req N: token mismatch` for every request, which looked alarming until I thought about it.
 
 The monolithic and disaggregated engines consume PyTorch's random number generator in different orders. In the monolithic scheduler, prefill and decode interleave within a single thread, consuming RNG values in a deterministic but interleaved order. In the disaggregated version, the prefill and decode workers are in separate threads — the prefill worker might consume RNG for request 2's sampling before or after the decode worker consumes RNG for request 0's next token, depending on thread scheduling.
 
-Since the RNG sequences diverge after the first sample, the generated tokens are different — but both are valid samples from the model's distribution. This is the same issue you'd hit with any form of parallelism. To verify true equivalence, you'd need either greedy decoding or per-request `torch.Generator` instances — same idea as the [correctness test post](/blog/2026/06/08/correctness-test), just a different source of non-determinism.
-
+Since the RNG sequences diverge after the first sample, the generated tokens are different — but both are valid samples from the model's distribution. This is the same issue you'd hit with any form of parallelism.
 ---
 
 ## How this maps to production
@@ -373,8 +372,10 @@ What this educational implementation *doesn't* capture is the memory management 
 
 The model doesn't know anything about disaggregation. `model.forward()` is called identically whether it's running prefill or decode — it's just called from different threads with different inputs. The `Head` attention implementation, `assemble_batch_cache()`, `disassemble_batch_cache()` — none of it changes. All of the disaggregation complexity lives in the threading and queue orchestration above the model.
 
-This is the same pattern we've seen across every optimization in this series. Chunked prefill was a scheduling change — the model didn't change. Continuous batching was a scheduling change — the model didn't change. The radix tree was a caching change — the model didn't change. And now disaggregated prefill is a threading change — the model didn't change.
+This is the same pattern we've seen across every optimization in this series. Chunked prefill was a scheduling change, and so was continuous batching. The radix tree was a caching change and now disaggregated prefill is a threading change. None of these optimizations touched the model's forward pass.
 
 Disaggregated prefill is a **pure scheduling optimization**. It's recognizing that prefill and decode have different computational profiles and giving them separate execution contexts so they don't interfere with each other. The elegant part is that you can layer it on top of everything we've already built without touching any of the layers below.
+
+You can find the entire sample code here: [https://github.com/czhou578/nanoGPT-inference/blob/main/nanogpt-disaggregated-prefill.py](https://github.com/czhou578/nanoGPT-inference/blob/main/nanogpt-disaggregated-prefill.py)
 
 CZ
