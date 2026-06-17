@@ -11,7 +11,7 @@ The problem is that each head launches its own matrix multiplication. With 4 hea
 
 The fix is **fused multi-head attention**: replace the per-head projections with a single `nn.Linear(n_embd, 3 * n_embd)` that computes Q, K, and V for *all* heads in one shot. One kernel launch, one weight matrix, one memory read. Then you just reshape the output to separate the heads.
 
-This sounds trivial — "just make it one big linear layer" — but the reshape is where everyone gets confused, including me. The tensor gymnastics to go from a flat `(B, T, n_embd)` output to the `(B, n_head, T, head_size)` layout that batched attention needs are subtle enough that it's worth walking through them carefully.
+This sounds trivial but the reshape is where everyone gets confused, including me. The tensor gymnastics to go from a flat `(B, T, n_embd)` output to the `(B, n_head, T, head_size)` layout that batched attention needs are subtle enough that it's worth walking through them carefully.
 
 ---
 
@@ -103,16 +103,15 @@ Shape goes from `(B, T, n_head, head_size)` to `(B, n_head, T, head_size)`. Now 
 
 ![QKV Tensor Reshape]({{ site.baseurl }}/images/fused_attention_thumbnail.png)
 
-If you skip the transpose and try to run attention with shape `(B, T, n_head, head_size)`, the matmul dimensions don't align — you'd be multiplying `(T, n_head, head_size)` by `(T, head_size, n_head)`, which is nonsensical. The transpose is not optional.
+If you skip the transpose and try to run attention with shape `(B, T, n_head, head_size)`, the matmul dimensions don't align — you'd be multiplying `(T, n_head, head_size)` by `(T, head_size, n_head)`, which is nonsensical.
 
 ---
 
 ## The two attention paths
 
-With the tensors reshaped, the rest is straightforward — but there are two completely different paths depending on whether we're training or doing inference with a KV cache.
+There are two completely different paths depending on whether we're training or doing inference with a KV cache.
 
 ```python
-    # can also use F.scaled_dot_product_attention here
     if not self.training:
         if self.key_cache is not None:
             self.key_cache   = torch.cat([self.key_cache, k], dim=2)   # dim=2 is T now
@@ -151,7 +150,7 @@ attn @ v: (B, 4, T, T) @ (B, 4, T, 8) → (B, 4, T, 8)    ← attended values
 
 The causal mask (`self.tril[:T, :T]`) prevents each token from attending to future positions — token 3 can see tokens 0, 1, 2, 3 but not 4, 5, etc. We `masked_fill` with `-inf` so that after softmax, those positions get zero weight. This is the same mask from the original NanoGPT, just applied to `(B, n_head, T, T)` instead of `(B, T, T)` — the extra `n_head` dimension broadcasts.
 
-I initially forgot this mask entirely. The model still trained and the loss decreased, but the generated text was incoherent — because during training the model could see the answer it was trying to predict. The loss was low because it was cheating, not because it was learning.
+I initially forgot this mask entirely. The model still trained and the loss decreased, but the generated text was incoherent, because during training the model could see the answer it was trying to predict. The loss was low because it was cheating, not because it was learning.
 
 ### Inference path (KV cache)
 
@@ -181,7 +180,7 @@ After both paths, `out` has shape `(B, n_head, T_q, head_size)`. We need to undo
 out = out.transpose(1, 2).contiguous().view(B, T, C)  # (B, T, n_embd)
 ```
 
-`.transpose(1, 2)` swaps `n_head` and `T` back: `(B, T, n_head, head_size)`. Then `.view(B, T, C)` flattens the last two dimensions back into `n_embd`. The `.contiguous()` call is necessary because `.transpose()` doesn't move data — it just changes strides — and `.view()` requires contiguous memory. Without it, PyTorch throws a runtime error.
+`.transpose(1, 2)` swaps `n_head` and `T` back: `(B, T, n_head, head_size)`. Then `.view(B, T, C)` flattens the last two dimensions back into `n_embd`. The `.contiguous()` call is necessary because `.transpose()` changes strides, not memory layout, and `.view()` requires contiguous memory. Without it, PyTorch throws a runtime error.
 
 Then `self.attn_proj(out)` applies the output projection, mapping from `n_embd → n_embd`. This is analogous to what `MultiHeadAttention.proj` did after concatenating all heads in the old architecture.
 
@@ -220,7 +219,7 @@ Once these changes are in, the `Head` and `MultiHeadAttention` classes are dead 
 
 ## Verifying equivalence
 
-This refactor shouldn't change the model's behavior — just how it's computed. To verify, I wrote a test that initializes both architectures with the same seed, manually converts the per-head weights into the fused layout, and asserts `torch.allclose` on the outputs.
+To verify, I wrote a test that initializes both architectures with the same seed, manually converts the per-head weights into the fused layout, and asserts `torch.allclose` on the outputs.
 
 The weight conversion is the tricky part. The old architecture has separate `Head.query.weight`, `Head.key.weight`, `Head.value.weight` tensors, each `(head_size, n_embd)` = `(8, 32)`. The fused `qkv.weight` is `(96, 32)`. The mapping:
 
@@ -230,7 +229,7 @@ qkv.weight rows 32–63:  K weights = cat([head0.key,   head1.key,   head2.key, 
 qkv.weight rows 64–95:  V weights = cat([head0.value, head1.value, head2.value, head3.value])
 ```
 
-This works because `qkv.split(n_embd, dim=2)` reads the first `n_embd=32` output dimensions as Q, the next 32 as K, the last 32 as V. And within each group, the heads are packed sequentially — which is exactly what `.view(B, T, n_head, head_size)` expects.
+This works because `qkv.split(n_embd, dim=2)` reads the first `n_embd=32` output dimensions as Q, the next 32 as K, the last 32 as V. And within each group, the heads are packed sequentially, which is exactly what `.view(B, T, n_head, head_size)` expects.
 
 The test passes with a max absolute difference of `1.79e-07` — well within float32 precision. The fused architecture is numerically equivalent to the per-head architecture.
 
@@ -270,7 +269,7 @@ out = F.scaled_dot_product_attention(
 )
 ```
 
-At our scale (`T=64`, CPU), the speedup is negligible. On GPU with `T=512+`, it's dramatic. This is why every production model uses `F.scaled_dot_product_attention` or its Triton equivalents — the memory savings alone make long-context attention feasible.
+At our scale (`T=64`, CPU), the speedup is negligible. On GPU with `T=512+`, it's dramatic. This is why every production model uses `F.scaled_dot_product_attention` or its Triton equivalents: the memory savings alone make long-context attention feasible.
 
 ---
 
