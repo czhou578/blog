@@ -2,7 +2,7 @@
 layout: post
 title: "Adding Chunked Prefill to NanoGPT"
 date: 2026-05-13
-image: https://czhou578.github.io/blog/images/prefill_starvation_comparison.png
+image: https://czhou578.github.io/blog/images/chunked_prefill_thumbnail.png
 ---
 
 <script type="module">
@@ -16,7 +16,7 @@ When a new request arrives, we run its entire prompt through the model in one sh
 
 The fix is conceptually simple: instead of processing the whole prompt at once, break it into smaller chunks and interleave them with decode steps. Each scheduler iteration processes one chunk of the prefill *and* one decode step for everyone already active. The prompt still gets fully processed — it just takes a few more iterations, and nobody else gets starved in the meantime.
 
-![Prefill Starvation vs Chunked Prefill]({{ site.baseurl }}/images/prefill_starvation_comparison.png)
+![Chunked Prefill vs Prefill Starvation]({{ site.baseurl }}/images/chunked_prefill_thumbnail.png)
 
 ## The token budget
 
