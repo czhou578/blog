@@ -2,6 +2,7 @@
 layout: post
 title: "NanoGPT: CUDA Graph Replay"
 date: 2026-06-21
+image: https://czhou578.github.io/blog/images/cuda_replay_thumbnail.png
 ---
 
 In the [fused attention post](/blog/2026/06/17/fused-att), we collapsed all per-head projections into a single `nn.Linear(n_embd, 3 * n_embd)`. This post goes one level deeper: instead of optimizing individual kernels, we eliminate the overhead of *launching* them entirely.
@@ -34,6 +35,8 @@ Without CUDA graph:                    With CUDA graph:
 PyTorch's API for this is three steps: warmup, capture, replay. We'll get to the exact code, but first there's a constraint that makes this interesting.
 
 ## The core constraint: static shapes
+
+![Static Shapes vs Dynamic KV Cache]({{ site.baseurl }}/images/cuda_replay_static_shapes.png)
 
 CUDA graphs record a fixed sequence of operations on **fixed-size tensors at fixed memory addresses**. Every pointer, every tensor shape, every stride is baked into the graph at capture time. If any tensor shape changes between replay calls, the graph is invalid, which will either crash or produce garbage.
 
@@ -298,7 +301,7 @@ After prefill, we sample the first decode token and advance `cache_pos`. Now com
     return idx
 ```
 
-The decode loop is clean. Three `.copy_()` / `.fill_()` calls to load the static buffers, one `graph.replay()`, and then standard sampling. The key: the KV cache is a static tensor that persists across replays. The graph recorded "write `k` into slot `cache_pos` of `self.key_cache`." On each replay, `cache_pos` has a new value and the input produces a new `k`, so the cache accumulates entries at successive positions. Exactly what we want.
+The decode loop is clean. Three `.copy_()` / `.fill_()` calls to load the static buffers, one `graph.replay()`, and then standard sampling. The key: the KV cache is a static tensor that persists across replays. The graph recorded "write `k` into slot `cache_pos` of `self.key_cache`." On each replay, `cache_pos` has a new value and the input produces a new `k`, so the cache accumulates entries at successive positions.
 
 Let me trace through what happens on replay step 3, assuming the prompt was 1 token long:
 
@@ -349,7 +352,7 @@ torch.manual_seed(42)
 print(decode(generate_cuda_graph(m, context, max_gen)[0].tolist()))
 ```
 
-If both paths produce the same text, the graph-safe decode path is correct — the static buffers, `index_copy_`, and the `kv_indices <= cache_pos` mask are all behaving identically to the eager path.
+If both paths produce the same text, the graph-safe decode path is correct.
 
 ---
 
@@ -357,15 +360,15 @@ If both paths produce the same text, the graph-safe decode path is correct — t
 
 In our toy model, the decode step computes maybe 50μs of actual GPU work and spends 250–750μs on kernel launch overhead. CUDA graphs eliminate that overhead, turning a 300–800μs step into a ~55μs step. That's a significant multiplier.
 
-But there's a catch that our `B=1` implementation doesn't have to deal with: **dynamic batch sizes**. In a production inference engine with continuous batching, the batch size changes every iteration — requests arrive and complete continuously. CUDA graphs need static shapes, so you can't capture a graph for batch size 7 and replay it with batch size 12.
+But there's a catch that our `B=1` implementation doesn't have to deal with: **dynamic batch sizes**. In a production inference engine with continuous batching, the batch size changes every iteration. CUDA graphs need static shapes, so you can't capture a graph for batch size 7 and replay it with batch size 12.
 
 The production solutions:
 
 **Bucketed graphs.** Pre-capture graphs for batch sizes 1, 2, 4, 8, 16, 32. At runtime, pad the actual batch to the nearest bucket size and replay that graph. You waste compute on the padding positions, but graph replay is so fast it's worth it. This is how vLLM does it.
 
-**Piecewise capture.** Instead of capturing the entire forward pass as one graph, capture each transformer layer separately. SGLang uses this approach — it gives more flexibility to change batch sizes between layers, though it adds complexity.
+**Piecewise capture.** Instead of capturing the entire forward pass as one graph, capture each transformer layer separately. SGLang uses this approach. It gives more flexibility to change batch sizes between layers, though it adds complexity.
 
-For our single-batch implementation, none of this matters. But if you wanted to support `B=1` through `B=64`, you'd need 7 separate graph captures (one per power-of-2 bucket). This is why production engines use the bucket approach instead of capturing every possible batch size.
+For our single-batch implementation, none of this matters. But if you wanted to support `B=1` through `B=64`, you'd need 7 separate graph captures (one per power-of-2 bucket).
 
 ---
 
@@ -439,8 +442,6 @@ CUDA graph decode loop:
 **Cache position off-by-one.** The warmup run actually *writes* into the KV cache (it's a real forward pass). I forgot to advance `cache_pos` after warmup, so the first graph replay wrote into the same cache slot as the warmup, overwriting it. The generated text started repeating itself. The fix: `cache_pos += 1` after warmup, before the decode loop.
 
 **Used Python int for cache position.** I initially passed `cache_pos` as a Python integer directly to `decode_cached`. This works in eager mode — PyTorch implicitly creates a tensor. But inside a CUDA graph, Python integers don't have GPU addresses. The graph needs a *tensor* it can read from. Switching to `self.static_cache_pos` (a scalar tensor with `.fill_()`) fixed it.
-
-**`softmax` producing NaN.** When the mask zeros out most of the 64 positions (e.g., at decode step 2, only positions 0-2 are valid), the `-inf` values in the attention matrix caused `softmax` to produce NaN for some heads. This turned out to be a precision issue with the mask construction — I was comparing with `<` instead of `<=`, so the current position was being masked out. The query had no valid keys to attend to. Switching to `<=` fixed it.
 
 ---
 
