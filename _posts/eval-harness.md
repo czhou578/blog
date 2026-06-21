@@ -2,6 +2,7 @@
 layout: post
 title: "NanoGPT: Evaluation Harness"
 date: 2026-06-21
+image: https://czhou578.github.io/blog/images/eval_harness_thumbnail.png
 ---
 
 # The Evaluation Harness: Catching Quality Regressions in NanoGPT
@@ -14,7 +15,7 @@ This post walks through the evaluation harness we built for NanoGPT to guard aga
 
 Consider a KV cache optimization. It runs faster, but did you introduce a subtle bug in position indexing? The model still *runs*, still produces tokens, but the attention pattern is slightly wrong. Your throughput benchmark shows a speedup and you ship it.
 
-Or consider speculative decoding. The accept/reject loop is mathematically proven to preserve the target distribution — but only if implemented correctly. A single sign error in the acceptance probability and the distribution silently diverges.
+Or consider speculative decoding. The accept/reject loop is mathematically proven to preserve the target distribution but only if implemented correctly. A single sign error in the acceptance probability and the distribution silently diverges.
 
 The eval harness exists to catch these failures. It measures four orthogonal quality signals and compares them against a frozen baseline. If any signal regresses beyond a configured threshold, the check fails.
 
@@ -112,11 +113,11 @@ For distinct-2, we extract every pair of consecutive tokens (bigrams) from the g
 
 **Why both distinct-2 and distinct-3?** They catch different failure modes. A model that cycles through `[A, B, A, B, ...]` has distinct-2 = 2/299 ≈ 0.007 (very bad — only two bigrams: `(A,B)` and `(B,A)`) but its individual tokens might look fine. Distinct-3 is even more sensitive because there are more possible trigrams, so repetitive patterns stand out more sharply.
 
-**Relationship to repetition ratio:** These metrics are complementary, not redundant. Repetition ratio measures local token uniqueness within windows. Distinct-N measures global n-gram diversity. A model could have low repetition ratio (each window has variety) but low distinct-N (the same diverse patterns repeat across the full sequence).
+**Relationship to repetition ratio:** These metrics are complementary. Repetition ratio measures local token uniqueness within windows. Distinct-N measures global n-gram diversity. A model could have low repetition ratio (each window has variety) but low distinct-N (the same diverse patterns repeat across the full sequence).
 
 ### 1.4 Consistency — "Is the output deterministic?"
 
-Given the same model, the same prompt, and the same random seed, you should get the same output. Always. If you don't, something is broken — uninitialized memory, race conditions, or non-deterministic operations.
+Given the same model, the same prompt, and the same random seed, you should get the same output.
 
 ```python
 def compute_consistency(generate_fn, model, prompt, max_new_tokens,
@@ -138,7 +139,7 @@ We run generation 3 times with the same seed (42). We compare all outputs to the
 
 **Why `.clone()` the prompt?** Some generate functions modify the input tensor in-place (appending tokens via `torch.cat`). Without cloning, subsequent trials would start with a different (longer) prompt.
 
-**Why is this separate from the other metrics?** Consistency is a *binary* quality in practice — either the system is deterministic or it isn't. The other metrics are continuous. A consistency of 0.67 isn't "okay" — it means there's a bug. That's why the regression check for consistency is a hard gate (must be 1.0), not a percentage threshold.
+**Why is this separate from the other metrics?** Consistency is a *binary* quality in practice — either the system is deterministic or it isn't. The other metrics are continuous. A consistency of 0.67 means there's a bug. That's why the regression check for consistency is a hard gate (must be 1.0), not a percentage threshold.
 
 ---
 
@@ -249,15 +250,17 @@ def generate_kv_cache(model, idx, max_new_tokens):
     return idx
 ```
 
-**Baseline** uses `model.train()` to disable the KV cache branch. Every generation step recomputes attention over the full sequence. This is the "obviously correct" reference.
+**Baseline** uses `model.train()` to disable the KV cache branch. Every generation step recomputes attention over the full sequence.
 
-**KV cache** uses `model.eval()` to enable the cache. It prefills the entire prompt in one pass, then decodes one token at a time — each decode step only processes the single new token, with the KV cache providing context from previous positions.
+**KV cache** uses `model.eval()` to enable the cache. It prefills the entire prompt in one pass, then decodes one token at a time. Each decode step only processes the single new token, with the KV cache providing context from previous positions.
 
-If the KV cache implementation is correct, both functions produce identically distributed outputs. If it's not, perplexity, repetition, and diversity will diverge — and the harness will catch it.
+If the KV cache implementation is correct, both functions produce identically distributed outputs. If it's not, perplexity, repetition, and diversity will diverge.
 
 ---
 
 ## Phase 3: Regression Detection
+
+![Regression Detection]({{ site.baseurl }}/images/eval_harness_regression.png)
 
 The third phase answers a binary question: **did anything get worse?**
 
@@ -284,7 +287,7 @@ _check("distinct_3", result.distinct_3, baseline.distinct_3, 10.0, "lower_is_wor
 consistency_regression = result.consistency < 1.0
 ```
 
-For "higher_is_worse" metrics (perplexity, repetition): regression if delta exceeds the positive threshold. For "lower_is_worse" metrics (distinct-2, distinct-3): regression if delta drops below the negative threshold. Consistency is a hard gate — any drop from 1.0 is a regression, because there's no acceptable level of non-determinism.
+For "higher_is_worse" metrics (perplexity, repetition): regression if delta exceeds the positive threshold. For "lower_is_worse" metrics (distinct-2, distinct-3): regression if delta drops below the negative threshold. For consistency, any drop from 1.0 is a regression because there's no acceptable level of non-determinism.
 
 ### Threshold Choices
 
@@ -300,7 +303,7 @@ The runner's `__main__` block calls `check_regressions()` and exits with `sys.ex
 
 ### Baseline Management
 
-The first time you run the eval suite, there's no baseline file — the runner creates one. The baseline is committed to the repository. To update it (e.g., after an intentional quality change), you delete `results/eval_baseline.json` and re-run. This is deliberate — updating the baseline should be a conscious decision, not something that happens automatically.
+The first time you run the eval suite, there's no baseline file so the runner creates one. The baseline is committed to the repository. To update it, you delete `results/eval_baseline.json` and re-run. 
 
 **Example baseline file (`results/eval_baseline.json`):**
 
@@ -355,7 +358,7 @@ Running `python benchmarks/eval_runs.py` produces a complete end-to-end trace. L
 
 Before any evaluation can happen, we need a model. These training logs establish that the model is learning — loss drops from 4.18 to 3.01 over 80 steps. This matters for two reasons:
 
-**The model must be partially trained, not converged.** A random model (loss ≈ `ln(65)` ≈ 4.17) assigns near-uniform probability to all tokens, so every generate function would produce equally random output — all metrics would match trivially. A fully converged model would have such peaked distributions that even sampling-based generation would be near-deterministic. The sweet spot is a partially trained model where sampling produces meaningfully diverse but non-random text. Loss of ~3.0 is exactly this sweet spot — the model has learned character patterns from Shakespeare but still has significant uncertainty.
+**The model must be partially trained, not converged.** A random model (loss ≈ `ln(65)` ≈ 4.17) assigns near-uniform probability to all tokens, so every generate function would produce equally random output. A fully converged model would have such peaked distributions that even sampling-based generation would be near-deterministic. The sweet spot is a partially trained model where sampling produces meaningfully diverse but non-random text. Loss of ~3.0 is exactly this sweet spot: the model has learned character patterns from Shakespeare but still has significant uncertainty.
 
 **Train/val loss tracking close together (3.03 vs 3.01 at step 79).** This confirms the model isn't overfitting to the training data, which would compromise the validity of our perplexity measurement on validation data. If train loss were 1.0 and val loss were 3.0, the perplexity metric would be measuring the model's failure to generalize rather than its fundamental language understanding.
 
@@ -380,11 +383,11 @@ Let's unpack each column and what the patterns across implementations reveal.
 
 #### Perplexity: 19.75 across the board
 
-Every implementation reports identical perplexity — 19.75. This is the single most important result in the table, and it's worth understanding why.
+Every implementation reports identical perplexity — 19.75. This is the single most important result in the table. 
 
-Perplexity is computed by running the *model's forward pass* over validation data windows. It doesn't involve any generate function at all. The same model object is shared across all evaluations. So perplexity *should* be identical across implementations — it's measuring the model's language modeling capability, not how we generate from it.
+Perplexity is computed by running the *model's forward pass* over validation data windows. It doesn't involve any generate function at all. The same model object is shared across all evaluations. So perplexity *should* be identical across implementations.
 
-**Why this matters:** If any implementation reported a different perplexity, it would mean that implementation had somehow corrupted the model's weights or state. This would be a catastrophic bug — imagine a generate function that accidentally runs a gradient update, or one that modifies the model's buffers in-place. Uniform perplexity across all rows confirms the model is intact after each implementation runs.
+**Why this matters:** If any implementation reported a different perplexity, it would mean that implementation had somehow corrupted the model's weights or state. Uniform perplexity across all rows confirms the model is intact after each implementation runs.
 
 The value of 19.75 itself tells us the model's quality: for each position, the model is "19.75× confused" — equivalent to uniformly distributing probability across ~20 tokens. With a vocab of 65 characters, this means the model has narrowed its prediction from "any of 65 characters" to "roughly 20 plausible characters." Not great, but expected for 80 training steps on a 57K-parameter model.
 
@@ -400,7 +403,7 @@ This is where the table gets interesting. There's a clear split:
 | greedy_no_cache | **0.8673** |
 | greedy_kv_cache | **0.8673** |
 
-**The sampling implementations (0.22–0.28)** show healthy repetition levels. Within any 20-token window, roughly 22–28% of tokens are repeats. Natural language has inherent repetition (common words like "the", "and", "to" recur frequently), so some repetition is expected. A value of ~0.23 is healthy for character-level Shakespeare.
+**The sampling implementations (0.22–0.28)** show healthy repetition levels. Within any 20-token window, roughly 22–28% of tokens are repeats. Natural language has inherent repetition (common words like "the", "and", "to"), so some repetition is expected. A value of ~0.23 is healthy for character-level Shakespeare.
 
 **The greedy implementations (0.87)** are dramatically higher. Why? Argmax decoding always picks the single most likely next token. Once the model enters a high-probability pattern (e.g., a common character sequence), it locks into a loop — it will repeat that pattern indefinitely because the argmax never breaks the cycle. With a 20-token window showing 87% repetition, the model is essentially producing 2–3 unique tokens in every window of 20. This confirms that greedy decoding is fundamentally less diverse, which is expected behavior, not a bug.
 
@@ -524,7 +527,7 @@ These are the most dramatic numbers in the report, and they're entirely expected
 
 **greedy_no_cache and greedy_kv_cache produce identical numbers.** This is the correctness signal we want for the KV cache under greedy decoding. Argmax is deterministic — there's no randomness to cause numerical-precision divergence to cascade. So if the KV cache is mathematically correct, greedy decoding must produce identical tokens whether you use the cache or not. And it does: every metric matches to the last decimal place. This is actually a stronger correctness proof than the sampling comparison, because there's no stochastic noise to mask subtle bugs.
 
-**Why these "regressions" validate the harness:** The greedy results serve as a sensitivity calibration. If the harness didn't flag a +285% repetition increase and a -75% diversity collapse, the thresholds would be too loose to catch real bugs. The fact that it flags cleanly and loudly — with the exact delta and direction clearly reported — proves the detection logic works. In a real CI setup, greedy implementations would either have their own separate baseline or be excluded from the sampling-baseline comparison.
+**Why these "regressions" validate the harness:** The greedy results serve as a sensitivity calibration. If the harness didn't flag a +285% repetition increase and a -75% diversity collapse, the thresholds would be too loose to catch real bugs. The fact that it flags cleanly and loudly with the exact delta and direction clearly reported proves the detection logic works. In a real CI setup, greedy implementations would either have their own separate baseline or be excluded from the sampling-baseline comparison.
 
 ### What the Results Tell Us Collectively
 
@@ -553,7 +556,7 @@ The eval harness is one layer of a multi-layer testing strategy:
 | **Throughput benchmarks** | Tokens/second, latency | Timing measurements |
 | **Load tests** | Behavior under concurrent requests | Request simulator with arrival patterns |
 
-The correctness tests (`test_correctness_equivalence.py`) answer "does this produce the exact same tokens?" — but only under greedy decoding, which eliminates sampling variance. The eval harness answers a softer question: "does this produce *statistically similar* text quality?" — which covers sampling-based generation where exact token matches aren't expected.
+The correctness tests (`test_correctness_equivalence.py`) answer "does this produce the exact same tokens?" — but only under greedy decoding, which eliminates sampling variance. The eval harness answers a softer question: "does this produce *statistically similar* text quality?".
 
 ---
 
@@ -579,4 +582,4 @@ The evaluation harness provides an automated quality safety net across three pha
 
 3. **Phase 3 — Regression detection:** A comparison engine with directional thresholds that flags degradations against a frozen baseline, outputting a pass/fail code suitable for CI.
 
-The key insight is that throughput benchmarks and quality evaluation are orthogonal concerns. You can have a 10× faster inference engine that produces garbage — throughput benchmarks will celebrate it. The eval harness catches the garbage.
+The key insight is that throughput benchmarks and quality evaluation are orthogonal concerns. You can have a 10× faster inference engine that produces garbage. The eval harness catches the garbage.
