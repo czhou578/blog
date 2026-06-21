@@ -6,13 +6,13 @@ date: 2026-06-21
 
 # The Evaluation Harness: Catching Quality Regressions in NanoGPT
 
-When you optimize an LLM inference engine — adding KV caches, paged attention, speculative decoding — you're chasing throughput. But there's a silent failure mode that benchmarks don't catch: **the model quietly gets dumber**. Output quality degrades, repetitions creep in, determinism breaks, and nobody notices until the generated text is nonsensical.
+When you optimize an LLM inference engine, you're chasing throughput. But there's a silent failure mode that benchmarks don't catch: **the model quietly gets dumber**. Output quality degrades, repetitions creep in, determinism breaks, and nobody notices until the generated text is nonsensical.
 
-This post walks through the three-phase evaluation harness we built for NanoGPT to guard against exactly this problem. The system is designed to be orthogonal to throughput benchmarks — it doesn't care about tokens/second. It cares about whether the tokens themselves are *correct*.
+This post walks through the evaluation harness we built for NanoGPT to guard against exactly this problem. The system is designed to be orthogonal to throughput benchmarks, but instead, measuring whether tokens are correct.
 
 ## Why Throughput Benchmarks Aren't Enough
 
-Consider a KV cache optimization. You verify it's faster — great. But did you introduce a subtle bug in position indexing? The model still *runs*, still produces tokens, but the attention pattern is slightly wrong. Perplexity creeps up by 8%. Output starts repeating phrases. Your throughput benchmark shows a speedup and you ship it.
+Consider a KV cache optimization. It runs faster, but did you introduce a subtle bug in position indexing? The model still *runs*, still produces tokens, but the attention pattern is slightly wrong. Your throughput benchmark shows a speedup and you ship it.
 
 Or consider speculative decoding. The accept/reject loop is mathematically proven to preserve the target distribution — but only if implemented correctly. A single sign error in the acceptance probability and the distribution silently diverges.
 
@@ -40,7 +40,7 @@ Each phase is independently useful, but the power comes from chaining them toget
 
 ## Phase 1: Quality Metrics
 
-These are stateless, pure functions. Each takes raw model outputs and returns a single float. None of them require a GPU — they all run on CPU — so they can gate CI without needing hardware.
+These are stateless, pure functions. Each takes raw model outputs and returns a single float. None of them require a GPU, so they can gate CI without needing hardware.
 
 ### 1.1 Perplexity — "Does the model understand language?"
 
@@ -142,7 +142,7 @@ def compute_repetition_ratio(
     return total_repetition / num_windows if num_windows > 0 else 0.0
 ```
 
-**How it works:** We slide a 20-token window over the generated output. In each window, we compute `1 - (unique_tokens / window_size)`. If all 20 tokens are distinct, repetition = 0. If the same token repeats 20 times, repetition = 1 - 1/20 = 0.95. We average across all windows.
+We slide a 20-token window over the generated output. In each window, we compute `1 - (unique_tokens / window_size)`. If all 20 tokens are distinct, repetition = 0. If the same token repeats 20 times, repetition = 1 - 1/20 = 0.95. We average across all windows.
 
 **Why a sliding window instead of global unique count?** A sequence like `[A, B, C, D, A, B, C, D, A, B, C, D, ...]` has high global diversity (4 unique tokens appears lots of times) but is obviously degenerate. The sliding window catches this because every window of 20 tokens will have at most 4 unique tokens.
 
@@ -173,7 +173,7 @@ def compute_distinct_n(tokens: list[int], n: int) -> float:
     return len(set(ngrams)) / len(ngrams)
 ```
 
-**How it works:** For distinct-2, we extract every pair of consecutive tokens (bigrams) from the generated text. If we generate 300 tokens, we get 299 bigrams. The metric is `unique_bigrams / total_bigrams`. Distinct-3 does the same with trigrams.
+For distinct-2, we extract every pair of consecutive tokens (bigrams) from the generated text. If we generate 300 tokens, we get 299 bigrams. The metric is `unique_bigrams / total_bigrams`. Distinct-3 does the same with trigrams.
 
 **Why both distinct-2 and distinct-3?** They catch different failure modes. A model that cycles through `[A, B, A, B, ...]` has distinct-2 = 2/299 ≈ 0.007 (very bad — only two bigrams: `(A,B)` and `(B,A)`) but its individual tokens might look fine. Distinct-3 is even more sensitive because there are more possible trigrams, so repetitive patterns stand out more sharply.
 
