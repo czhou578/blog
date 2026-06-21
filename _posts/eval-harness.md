@@ -47,60 +47,27 @@ These are stateless, pure functions. Each takes raw model outputs and returns a 
 Perplexity is the exponential of the average cross-entropy loss on held-out data. A lower perplexity means the model is better at predicting what comes next. If an optimization breaks the model's language understanding, perplexity will spike.
 
 ```python
-def compute_perplexity(
-    model,
-    val_data: torch.Tensor,
-    *,
-    device: str,
-    block_size: int,
-    num_windows: int = 50,
-    window_size: int = 32,
-    model_returns_3: bool = False,
-) -> float:
-    """
-    Sliding-window perplexity on validation data.
-
-    Picks `num_windows` random windows of `window_size` tokens from val_data,
-    runs a forward pass, and computes the average cross-entropy loss.
-    Perplexity = exp(avg_loss).
-    """
+def compute_perplexity(model, val_data, *, device, block_size,
+                       num_windows=50, window_size=32) -> float:
     model.eval()
-    total_loss = 0.0
-    count = 0
-
-    # Clamp window_size to block_size so we never exceed the model's
-    # positional embedding range.
+    total_loss, count = 0.0, 0
     window_size = min(window_size, block_size)
-
     torch.manual_seed(42)
-    max_start = len(val_data) - window_size - 1
-    if max_start <= 0:
-        return float("inf")
 
     with torch.no_grad():
         for _ in range(num_windows):
-            start = torch.randint(0, max_start, (1,)).item()
+            start = torch.randint(0, len(val_data) - window_size - 1, (1,)).item()
             x = val_data[start : start + window_size].unsqueeze(0).to(device)
             y = val_data[start + 1 : start + window_size + 1].unsqueeze(0).to(device)
-
-            result = model(x, y)
-            if model_returns_3:
-                _, loss, _ = result
-            else:
-                _, loss = result
-
+            _, loss = model(x, y)
             if loss is not None:
                 total_loss += loss.item()
                 count += 1
 
-    if count == 0:
-        return float("inf")
-
-    avg_loss = total_loss / count
-    return math.exp(avg_loss)
+    return math.exp(total_loss / count) if count else float("inf")
 ```
 
-**How it works:** We sample 50 random windows of 32 tokens from the validation set (Tiny Shakespeare). For each window, we feed tokens `[0..31]` as input and `[1..32]` as targets. The model predicts the next token at every position, and PyTorch's `cross_entropy` gives us the average loss. We then exponentiate: `perplexity = exp(avg_loss)`.
+We sample 50 random windows of 32 tokens from the validation set (Tiny Shakespeare). For each window, we feed tokens `[0..31]` as input and `[1..32]` as targets. The model predicts the next token at every position, and PyTorch's `cross_entropy` gives us the average loss. We then exponentiate: `perplexity = exp(avg_loss)`.
 
 **Why sliding windows?** A single long sequence would only measure one context. Random windows sample diverse positions across the corpus, giving a more robust estimate.
 
@@ -113,32 +80,12 @@ def compute_perplexity(
 A degenerate model often falls into repetitive patterns: "the the the the the..." or "I think that I think that I think that...". Repetition ratio quantifies this.
 
 ```python
-def compute_repetition_ratio(
-    tokens: list[int],
-    window_size: int = 20,
-) -> float:
-    """
-    Fraction of tokens that are repeated within a sliding window.
-
-    Returns a value between 0 (all unique within every window) and 1 (all repeated).
-    This catches degenerate repetition loops.
-    """
-    if len(tokens) < window_size:
-        if len(tokens) == 0:
-            return 0.0
-        unique = len(set(tokens))
-        return 1.0 - (unique / len(tokens))
-
+def compute_repetition_ratio(tokens: list[int], window_size: int = 20) -> float:
     total_repetition = 0.0
-    num_windows = 0
-
     for i in range(len(tokens) - window_size + 1):
         window = tokens[i : i + window_size]
-        unique = len(set(window))
-        repetition = 1.0 - (unique / window_size)
-        total_repetition += repetition
-        num_windows += 1
-
+        total_repetition += 1.0 - (len(set(window)) / window_size)
+    num_windows = len(tokens) - window_size + 1
     return total_repetition / num_windows if num_windows > 0 else 0.0
 ```
 
@@ -157,20 +104,8 @@ Distinct-N, from [Li et al. (2016)](https://aclanthology.org/N16-1014/), measure
 
 ```python
 def compute_distinct_n(tokens: list[int], n: int) -> float:
-    """
-    Distinct-N: the ratio of unique n-grams to total n-grams.
-
-    Higher = more diverse output. A value of 1.0 means every n-gram is unique.
-    This is a standard text diversity metric from Li et al. (2016).
-    """
-    if len(tokens) < n:
-        return 1.0
-
     ngrams = [tuple(tokens[i : i + n]) for i in range(len(tokens) - n + 1)]
-    if not ngrams:
-        return 1.0
-
-    return len(set(ngrams)) / len(ngrams)
+    return len(set(ngrams)) / len(ngrams) if ngrams else 1.0
 ```
 
 For distinct-2, we extract every pair of consecutive tokens (bigrams) from the generated text. If we generate 300 tokens, we get 299 bigrams. The metric is `unique_bigrams / total_bigrams`. Distinct-3 does the same with trigrams.
@@ -184,43 +119,22 @@ For distinct-2, we extract every pair of consecutive tokens (bigrams) from the g
 Given the same model, the same prompt, and the same random seed, you should get the same output. Always. If you don't, something is broken — uninitialized memory, race conditions, or non-deterministic operations.
 
 ```python
-def compute_consistency(
-    generate_fn: Callable,
-    model,
-    prompt: torch.Tensor,
-    max_new_tokens: int,
-    *,
-    device: str,
-    num_trials: int = 3,
-    seed: int = 42,
-) -> float:
-    """
-    Deterministic consistency: generate with the same seed multiple times.
-
-    Returns 1.0 if all trials produce identical output, 0.0 if none match.
-    This catches non-determinism bugs (race conditions, uninitialized memory).
-    """
+def compute_consistency(generate_fn, model, prompt, max_new_tokens,
+                        *, device, num_trials=3, seed=42) -> float:
     outputs = []
-
     for _ in range(num_trials):
         torch.manual_seed(seed)
         with torch.no_grad():
             result = generate_fn(model, prompt.clone().to(device), max_new_tokens)
-            if isinstance(result, torch.Tensor):
-                tokens = result[0].tolist()
-            else:
-                tokens = result
+            tokens = result[0].tolist() if isinstance(result, torch.Tensor) else result
         outputs.append(tokens)
-
-    if not outputs:
-        return 1.0
 
     reference = outputs[0]
     matches = sum(1 for out in outputs[1:] if out == reference)
-    return (matches + 1) / len(outputs)  # +1 for the reference matching itself
+    return (matches + 1) / len(outputs)
 ```
 
-**How it works:** We run generation 3 times with the same seed (42). We compare all outputs to the first run. If all 3 are identical, consistency = 3/3 = 1.0. If only the first matches itself, consistency = 1/3 ≈ 0.33.
+We run generation 3 times with the same seed (42). We compare all outputs to the first run. If all 3 are identical, consistency = 3/3 = 1.0. If only the first matches itself, consistency = 1/3 ≈ 0.33.
 
 **Why `.clone()` the prompt?** Some generate functions modify the input tensor in-place (appending tokens via `torch.cat`). Without cloning, subsequent trials would start with a different (longer) prompt.
 
@@ -228,404 +142,114 @@ def compute_consistency(
 
 ---
 
-## Data Classes: Structuring the Results
+## Phase 2: The Eval Runner
 
-Before looking at how these metrics get orchestrated, let's understand the data structures that carry results through the pipeline.
+The `EvalHarness` class ties Phase 1's metric functions together into a coherent evaluation flow. It holds a reference to the model, the validation data, and configuration. The runner script (`eval_runs.py`) then builds a model, trains it, and sweeps across multiple generate implementations.
 
-### EvalResult — One Implementation's Scorecard
+### Prompt Generation
 
-```python
-@dataclass
-class EvalResult:
-    """Quality metrics for one implementation."""
-    implementation: str
-    perplexity: float
-    repetition_ratio: float       # 0 = all unique, 1 = all repeated
-    distinct_2: float             # distinct bigrams / total bigrams
-    distinct_3: float             # distinct trigrams / total trigrams
-
-    consistency: float            # 1.0 = perfectly reproducible across seeds
-    num_prompts: int
-    num_tokens_generated: int
-    eval_time_seconds: float
-    timestamp: str                # ISO 8601
-    config: dict = field(default_factory=dict)
-
-    def to_dict(self) -> dict:
-        return asdict(self)
-
-    @classmethod
-    def from_dict(cls, d: dict) -> "EvalResult":
-        return cls(**d)
-
-    def to_json(self, path: str):
-        with open(path, "w") as f:
-            json.dump(self.to_dict(), f, indent=2)
-
-    @classmethod
-    def from_json(cls, path: str) -> "EvalResult":
-        with open(path) as f:
-            return cls.from_dict(json.load(f))
-```
-
-An `EvalResult` is a self-contained snapshot. It records every metric, the configuration used to produce them, and a timestamp. Serialization to/from JSON means baselines can be committed to the repository and loaded in CI.
-
-### RegressionFlag & RegressionReport — The Comparison Output
-
-```python
-@dataclass
-class RegressionFlag:
-    """A single regression signal."""
-    metric: str
-    baseline_value: float
-    current_value: float
-    threshold_pct: float
-    delta_pct: float
-    is_regression: bool
-    direction: str   # "higher_is_worse" or "lower_is_worse"
-
-
-@dataclass
-class RegressionReport:
-    """Comparison of current eval against a baseline."""
-    implementation: str
-    baseline_implementation: str
-    flags: list  # list of RegressionFlag
-    overall_pass: bool
-    timestamp: str
-```
-
-Each metric gets its own `RegressionFlag` with the baseline value, the current value, the percentage delta, and whether it crossed the threshold. The `direction` field encodes which way is bad — perplexity increasing is bad ("higher_is_worse"), but distinct-N decreasing is bad ("lower_is_worse"). The `RegressionReport` bundles all flags together and sets `overall_pass = True` only if *no* individual flag is a regression.
-
----
-
-## Phase 2: The Eval Runner — Orchestrating the Pipeline
-
-The `EvalHarness` class ties Phase 1's metric functions together into a coherent evaluation flow. The runner script (`eval_runs.py`) then builds a model, trains it, and sweeps across multiple generate implementations.
-
-### The EvalHarness Class
-
-```python
-class EvalHarness:
-    """
-    Quality evaluation harness for NanoGPT implementations.
-
-    Runs a battery of quality tests on CPU and produces an EvalResult
-    that can be compared against a frozen baseline for regression detection.
-    """
-
-    def __init__(
-        self,
-        model,
-        val_data: torch.Tensor,
-        vocab_size: int,
-        *,
-        device: str = "cpu",
-        block_size: int = 64,
-        model_returns_3: bool = False,
-    ):
-        self.model = model
-        self.val_data = val_data
-        self.vocab_size = vocab_size
-        self.device = device
-        self.block_size = block_size
-        self.model_returns_3 = model_returns_3
-```
-
-The harness holds a reference to the model, the validation data, and configuration. The `model_returns_3` flag handles the fact that some implementations return `(logits, loss, kv_cache)` while others return `(logits, loss)`.
-
-### Prompt Generation — Deterministic and From Real Data
-
-```python
-def _make_prompts(
-    self,
-    num_prompts: int = 20,
-    prompt_len: int = 16,
-    seed: int = 42,
-) -> list[torch.Tensor]:
-    """Generate deterministic prompts from validation data."""
-    prompts = []
-    torch.manual_seed(seed)
-
-    max_start = len(self.val_data) - prompt_len
-    if max_start <= 0:
-        # Fallback: use random tokens
-        for _ in range(num_prompts):
-            p = torch.randint(0, self.vocab_size, (1, prompt_len))
-            prompts.append(p)
-        return prompts
-
-    for _ in range(num_prompts):
-        start = torch.randint(0, max_start, (1,)).item()
-        p = self.val_data[start : start + prompt_len].unsqueeze(0)
-        prompts.append(p)
-
-    return prompts
-```
-
-**Why real data?** Random token sequences are out-of-distribution — the model has never seen them during training. Testing generation from random prompts might reveal different issues than real prompts. By slicing from validation data, we prompt with realistic Shakespeare text, which exercises the model's learned distribution.
-
-**Why 20 prompts of 16 tokens?** This is a balance between coverage and speed. 20 prompts × 30 generated tokens = 600 generation steps, enough to get stable diversity metrics without making the eval take minutes.
+Prompts are sliced from validation data (not random tokens) to exercise the model's learned distribution. We use `torch.manual_seed(42)` so every run samples the same 20 prompts of 16 tokens, giving 600 generation steps — enough for stable diversity metrics without making the eval take minutes.
 
 ### Generation Quality Evaluation
 
 This is where the individual metric functions get called:
 
 ```python
-def eval_generation_quality(
-    self,
-    generate_fn: Callable,
-    *,
-    num_prompts: int = 20,
-    prompt_len: int = 16,
-    max_new_tokens: int = 50,
-    num_seeds: int = 3,
-) -> dict:
-    """
-    Generate from prompts and compute quality metrics.
-    """
+def eval_generation_quality(self, generate_fn, *, num_prompts=20,
+                            prompt_len=16, max_new_tokens=50) -> dict:
     prompts = self._make_prompts(num_prompts, prompt_len)
-
     all_generated = []
-    total_tokens = 0
 
-    # Use a max_new_tokens that fits in block_size
-    effective_max_tokens = min(
-        max_new_tokens,
-        self.block_size - prompt_len - 1,
-    )
-    if effective_max_tokens <= 0:
-        effective_max_tokens = 1
+    # Clamp to block_size to prevent positional embedding overflow
+    effective_max_tokens = min(max_new_tokens, self.block_size - prompt_len - 1)
 
     self.model.eval()
     with torch.no_grad():
         for prompt in prompts:
             torch.manual_seed(42)
-            result = generate_fn(
-                self.model,
-                prompt.clone().to(self.device),
-                effective_max_tokens,
-            )
-            if isinstance(result, torch.Tensor):
-                generated = result[0, prompt.shape[1]:].tolist()
-            else:
-                generated = result[prompt.shape[1]:]
-
+            result = generate_fn(self.model, prompt.clone().to(self.device),
+                                 effective_max_tokens)
+            generated = result[0, prompt.shape[1]:].tolist()
             all_generated.append(generated)
-            total_tokens += len(generated)
 
     # Compute aggregate metrics across all generations
     all_tokens_flat = [t for gen in all_generated for t in gen]
-
-    repetition = compute_repetition_ratio(all_tokens_flat)
-    distinct_2 = compute_distinct_n(all_tokens_flat, 2)
-    distinct_3 = compute_distinct_n(all_tokens_flat, 3)
-
-    # Consistency: test with first prompt
-    consistency = compute_consistency(
-        generate_fn,
-        self.model,
-        prompts[0],
-        effective_max_tokens,
-        device=self.device,
-        num_trials=num_seeds,
-    )
-
     return {
-        "repetition_ratio": repetition,
-        "distinct_2": distinct_2,
-        "distinct_3": distinct_3,
-        "consistency": consistency,
-        "all_tokens": all_generated,
-        "num_tokens_generated": total_tokens,
+        "repetition_ratio": compute_repetition_ratio(all_tokens_flat),
+        "distinct_2": compute_distinct_n(all_tokens_flat, 2),
+        "distinct_3": compute_distinct_n(all_tokens_flat, 3),
+        "consistency": compute_consistency(generate_fn, self.model, prompts[0],
+                                           effective_max_tokens, device=self.device),
     }
 ```
 
-**Key detail: `effective_max_tokens`.** The model has a `block_size` of 64. If the prompt is 16 tokens, we can generate at most `64 - 16 - 1 = 47` new tokens (the `-1` leaves room for the target offset). This clamping prevents positional embedding overflow.
+**Key detail: `effective_max_tokens`.** The model has a `block_size` of 64. If the prompt is 16 tokens, we can generate at most `64 - 16 - 1 = 47` new tokens. This clamping prevents positional embedding overflow.
 
-**Key detail: flattening tokens.** Repetition and distinct-N are computed on `all_tokens_flat` — the concatenation of all generated sequences. This gives a corpus of ~300 tokens (10 prompts × 30 tokens), large enough for stable n-gram statistics.
+**Key detail: flattening tokens.** Repetition and distinct-N are computed on `all_tokens_flat` — the concatenation of all generated sequences. This gives a corpus of ~300 tokens, large enough for stable n-gram statistics.
 
 **Key detail: consistency uses only the first prompt.** Running consistency across all 20 prompts would multiply the eval time by 3×. Since non-determinism bugs are systemic (if one prompt is non-deterministic, they all are), testing with one prompt is sufficient.
 
-### The Full Eval Pipeline
-
-`run_full_eval` chains perplexity and generation quality into a single `EvalResult`:
-
-```python
-def run_full_eval(
-    self,
-    generate_fn: Callable,
-    implementation_name: str,
-    *,
-    num_prompts: int = 20,
-    prompt_len: int = 16,
-    max_new_tokens: int = 50,
-    num_seeds: int = 3,
-    num_ppl_windows: int = 50,
-) -> EvalResult:
-    """Full eval pipeline: perplexity + generation quality."""
-    start_time = time.perf_counter()
-
-    # 1. Perplexity
-    ppl = self.eval_perplexity(
-        num_windows=num_ppl_windows,
-        window_size=min(32, self.block_size),
-    )
-
-    # 2. Generation quality
-    quality = self.eval_generation_quality(
-        generate_fn,
-        num_prompts=num_prompts,
-        prompt_len=prompt_len,
-        max_new_tokens=max_new_tokens,
-        num_seeds=num_seeds,
-    )
-
-    elapsed = time.perf_counter() - start_time
-
-    return EvalResult(
-        implementation=implementation_name,
-        perplexity=ppl,
-        repetition_ratio=quality["repetition_ratio"],
-        distinct_2=quality["distinct_2"],
-        distinct_3=quality["distinct_3"],
-        consistency=quality["consistency"],
-        num_prompts=num_prompts,
-        num_tokens_generated=quality["num_tokens_generated"],
-        eval_time_seconds=elapsed,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-        config={
-            "block_size": self.block_size,
-            "vocab_size": self.vocab_size,
-            "device": self.device,
-            "prompt_len": prompt_len,
-            "max_new_tokens": max_new_tokens,
-            "num_prompts": num_prompts,
-            "num_seeds": num_seeds,
-        },
-    )
-```
-
-Notice that the config dict is saved inside the result. This is essential for reproducibility — if you look at a baseline from three months ago, you need to know exactly what parameters produced it.
+The `run_full_eval` method chains perplexity and generation quality together into a single `EvalResult` dataclass — a self-contained snapshot with every metric, the configuration that produced them, and a timestamp. Serialization to/from JSON means baselines can be committed to the repository and loaded in CI.
 
 ### The Runner Script: Training + Multi-Implementation Sweep
 
-The runner (`eval_runs.py`) builds the entire pipeline from scratch:
+The runner (`eval_runs.py`) trains a 57K-parameter model from a fixed seed (`torch.manual_seed(1337)`) in under a second, then evaluates each generate implementation:
 
 ```python
-def run_eval_suite(
-    *,
-    num_prompts: int = 10,
-    prompt_len: int = 16,
-    max_new_tokens: int = 30,
-    num_ppl_windows: int = 30,
-    save_results: bool = True,
-    verbose: bool = True,
-) -> dict:
-    """
-    Run the full eval suite:
-      1. Train a small model
-      2. Evaluate each generate variant
-      3. Compare against baseline
-      4. Save results
-    """
-    # Load data
-    train_data, val_data, vocab_size = _load_data()
+implementations = {
+    "baseline_no_cache": generate_baseline,
+    "kv_cache_prefill_decode": generate_kv_cache,
+    "kv_cache_feed_one": generate_feed_one_token,
+    "greedy_no_cache": generate_greedy_baseline,
+    "greedy_kv_cache": generate_greedy_kv_cache,
+}
 
-    # Build and train model
-    torch.manual_seed(1337)
-    model = GPTLanguageModel(vocab_size)
-
-    _train_model(model, train_data, val_data, verbose=verbose)
-
-    # Define generate functions to evaluate
-    implementations = {
-        "baseline_no_cache": generate_baseline,
-        "kv_cache_prefill_decode": generate_kv_cache,
-        "kv_cache_feed_one": generate_feed_one_token,
-        "greedy_no_cache": generate_greedy_baseline,
-        "greedy_kv_cache": generate_greedy_kv_cache,
-    }
-
-    harness = EvalHarness(
-        model, val_data, vocab_size,
-        device=DEVICE, block_size=BLOCK_SIZE,
-        model_returns_3=False,
-    )
-
-    results = {}
-
-    for name, gen_fn in implementations.items():
-        # Clear any leftover KV caches from the previous implementation
-        _clear_kv_cache(model)
-
-        result = harness.run_full_eval(
-            gen_fn, name,
-            num_prompts=num_prompts,
-            prompt_len=prompt_len,
-            max_new_tokens=max_new_tokens,
-            num_ppl_windows=num_ppl_windows,
-        )
-
-        results[name] = result
-
-    return results
+for name, gen_fn in implementations.items():
+    _clear_kv_cache(model)  # prevent cache leaking between implementations
+    results[name] = harness.run_full_eval(gen_fn, name, ...)
 ```
 
-**Why train from scratch every time?** The eval model is tiny — 57K parameters, 80 training steps. Training takes under a second on CPU. By training from a fixed seed (`torch.manual_seed(1337)`), we get a bit-identical model every run. This eliminates "the baseline was a different model" as a confounding variable.
+**Why train from scratch every time?** By training from a fixed seed, we get a bit-identical model every run. This eliminates "the baseline was a different model" as a confounding variable.
 
 **Why `_clear_kv_cache(model)` between implementations?** KV cache state is stored inside the `Head` modules. Without clearing, the KV cache from `generate_kv_cache` would leak into the next implementation's evaluation, corrupting results.
 
 ### The Generate Functions Under Test
 
-Each generate function implements a different inference strategy. Here's the baseline (no cache) vs. the KV-cached variant:
+Each generate function implements a different inference strategy:
 
 ```python
 def generate_baseline(model, idx, max_new_tokens):
-    """
-    Vanilla autoregressive — full recompute every step (no KV cache).
-    """
+    """Vanilla autoregressive — full recompute every step (no KV cache)."""
     model.train()  # Disables the KV cache branch in Head
     with torch.no_grad():
         for _ in range(max_new_tokens):
             idx_cond = idx[:, -BLOCK_SIZE:]
             logits, _ = model(idx_cond, start_pos=0)
-            logits = logits[:, -1, :]
-            probs = F.softmax(logits, dim=-1)
-            idx_next = torch.multinomial(probs, num_samples=1)
-            idx = torch.cat((idx, idx_next), dim=1)
+            probs = F.softmax(logits[:, -1, :], dim=-1)
+            idx = torch.cat((idx, torch.multinomial(probs, num_samples=1)), dim=1)
     return idx
 
 
 def generate_kv_cache(model, idx, max_new_tokens):
-    """
-    KV-cached generation: prefill once, then decode one token at a time.
-    """
+    """KV-cached: prefill once, then decode one token at a time."""
     model.eval()
     _clear_kv_cache(model)
-
     with torch.no_grad():
         # Prefill
         logits, _ = model(idx)
-        logits = logits[:, -1, :]
-        probs = F.softmax(logits, dim=-1)
+        probs = F.softmax(logits[:, -1, :], dim=-1)
         idx_next = torch.multinomial(probs, num_samples=1)
         idx = torch.cat((idx, idx_next), dim=1)
-
         # Decode
         for _ in range(max_new_tokens - 1):
-            start_pos = idx.shape[1] - 1
-            logits, _ = model(idx[:, -1:], start_pos=start_pos)
-            logits = logits[:, -1, :]
-            probs = F.softmax(logits, dim=-1)
+            logits, _ = model(idx[:, -1:], start_pos=idx.shape[1] - 1)
+            probs = F.softmax(logits[:, -1, :], dim=-1)
             idx_next = torch.multinomial(probs, num_samples=1)
             idx = torch.cat((idx, idx_next), dim=1)
-
-    model.train()
     return idx
 ```
 
-**Baseline** uses `model.train()` to disable the KV cache branch inside the `Head` module. Every generation step recomputes attention over the full sequence (up to `BLOCK_SIZE`). This is the "obviously correct" reference.
+**Baseline** uses `model.train()` to disable the KV cache branch. Every generation step recomputes attention over the full sequence. This is the "obviously correct" reference.
 
 **KV cache** uses `model.eval()` to enable the cache. It prefills the entire prompt in one pass, then decodes one token at a time — each decode step only processes the single new token, with the KV cache providing context from previous positions.
 
@@ -639,93 +263,28 @@ The third phase answers a binary question: **did anything get worse?**
 
 ### The Comparison Logic
 
+The `compare_to_baseline` method checks each metric against configurable percentage thresholds:
+
 ```python
-@staticmethod
-def compare_to_baseline(
-    result: EvalResult,
-    baseline: EvalResult,
-    *,
-    perplexity_threshold_pct: float = 5.0,
-    repetition_threshold_pct: float = 10.0,
-    diversity_threshold_pct: float = 10.0,
-) -> RegressionReport:
-    """
-    Compare current eval against a baseline and flag regressions.
+def _check(metric_name, current, baseline_val, threshold_pct, direction):
+    delta_pct = ((current - baseline_val) / abs(baseline_val)) * 100
+    if direction == "higher_is_worse":
+        is_regression = delta_pct > threshold_pct
+    else:  # lower_is_worse
+        is_regression = delta_pct < -threshold_pct
+    flags.append(RegressionFlag(metric_name, baseline_val, current,
+                                threshold_pct, delta_pct, is_regression, direction))
 
-    Thresholds are percentage changes. A regression is flagged when:
-      - Perplexity increases by more than 5%
-      - Repetition ratio increases by more than 10%
-      - Distinct-2 or Distinct-3 decreases by more than 10%
-      - Consistency drops below 1.0
-    """
-    flags = []
+_check("perplexity", result.perplexity, baseline.perplexity, 5.0, "higher_is_worse")
+_check("repetition_ratio", result.repetition_ratio, baseline.repetition_ratio, 10.0, "higher_is_worse")
+_check("distinct_2", result.distinct_2, baseline.distinct_2, 10.0, "lower_is_worse")
+_check("distinct_3", result.distinct_3, baseline.distinct_3, 10.0, "lower_is_worse")
 
-    def _check(
-        metric_name: str,
-        current: float,
-        baseline_val: float,
-        threshold_pct: float,
-        direction: str,
-    ):
-        if baseline_val == 0:
-            delta_pct = 0.0 if current == 0 else 100.0
-        else:
-            delta_pct = ((current - baseline_val) / abs(baseline_val)) * 100
-
-        if direction == "higher_is_worse":
-            is_regression = delta_pct > threshold_pct
-        else:  # lower_is_worse
-            is_regression = delta_pct < -threshold_pct
-
-        flags.append(RegressionFlag(
-            metric=metric_name,
-            baseline_value=baseline_val,
-            current_value=current,
-            threshold_pct=threshold_pct,
-            delta_pct=delta_pct,
-            is_regression=is_regression,
-            direction=direction,
-        ))
-
-    _check("perplexity", result.perplexity, baseline.perplexity,
-           perplexity_threshold_pct, "higher_is_worse")
-    _check("repetition_ratio", result.repetition_ratio, baseline.repetition_ratio,
-           repetition_threshold_pct, "higher_is_worse")
-    _check("distinct_2", result.distinct_2, baseline.distinct_2,
-           diversity_threshold_pct, "lower_is_worse")
-    _check("distinct_3", result.distinct_3, baseline.distinct_3,
-           diversity_threshold_pct, "lower_is_worse")
-
-    # Consistency is a hard check: must be 1.0
-    consistency_regression = result.consistency < 1.0
-    flags.append(RegressionFlag(
-        metric="consistency",
-        baseline_value=baseline.consistency,
-        current_value=result.consistency,
-        threshold_pct=0.0,
-        delta_pct=(result.consistency - baseline.consistency) * 100,
-        is_regression=consistency_regression,
-        direction="lower_is_worse",
-    ))
-
-    overall_pass = not any(f.is_regression for f in flags)
-
-    return RegressionReport(
-        implementation=result.implementation,
-        baseline_implementation=baseline.implementation,
-        flags=flags,
-        overall_pass=overall_pass,
-        timestamp=datetime.now(timezone.utc).isoformat(),
-    )
+# Consistency is a hard check: must be 1.0
+consistency_regression = result.consistency < 1.0
 ```
 
-**The `_check` helper** encapsulates the directional threshold logic. It computes `delta_pct = (current - baseline) / |baseline| * 100`. Then:
-- For "higher_is_worse" metrics (perplexity, repetition): regression if delta exceeds the positive threshold.
-- For "lower_is_worse" metrics (distinct-2, distinct-3): regression if delta drops below the negative threshold.
-
-**Why percentages, not absolute values?** A perplexity increase from 19.75 to 20.50 is a 3.8% change — acceptable. But an increase from 19.75 to 25.0 is 26.6% — clearly broken. Percentage thresholds normalize across different baseline levels.
-
-**Why is consistency a hard gate?** Unlike the other metrics, there's no acceptable level of non-determinism. If consistency = 0.67, you have a bug. Period. The threshold is 0% — any drop from 1.0 is a regression.
+For "higher_is_worse" metrics (perplexity, repetition): regression if delta exceeds the positive threshold. For "lower_is_worse" metrics (distinct-2, distinct-3): regression if delta drops below the negative threshold. Consistency is a hard gate — any drop from 1.0 is a regression, because there's no acceptable level of non-determinism.
 
 ### Threshold Choices
 
@@ -737,74 +296,11 @@ def compare_to_baseline(
 | Distinct-3 | ±10% | Lower is worse | Same |
 | Consistency | 0% (hard) | Lower is worse | Must be exactly 1.0; any failure indicates a bug |
 
-### The CI Entry Point
-
-```python
-def check_regressions(
-    results: dict[str, EvalResult],
-    baseline_path: str | None = None,
-) -> bool:
-    """
-    Check all results against a frozen baseline file.
-
-    Returns True if all pass, False if any regression detected.
-    Designed to be called from CI or a test runner.
-    """
-    if baseline_path is None:
-        baseline_path = str(
-            Path(__file__).resolve().parent.parent / "results" / "eval_baseline.json"
-        )
-
-    if not Path(baseline_path).exists():
-        print(f"  ⚠ No baseline found at {baseline_path}")
-        print(f"    Run `python benchmarks/eval_runs.py` first to generate one.")
-        return True  # Can't check without a baseline
-
-    baseline = EvalResult.from_json(baseline_path)
-    all_pass = True
-
-    for name, result in results.items():
-        report = EvalHarness.compare_to_baseline(result, baseline)
-        if not report.overall_pass:
-            print_regression_report(report)
-            all_pass = False
-
-    if all_pass:
-        print("  ✅ All implementations pass regression checks.")
-
-    return all_pass
-```
-
-And the script's `__main__` block ties it together:
-
-```python
-if __name__ == "__main__":
-    results = run_eval_suite()
-
-    # Exit with non-zero code if any regression detected
-    baseline_path = Path(__file__).resolve().parent.parent / "results" / "eval_baseline.json"
-    if baseline_path.exists():
-        all_pass = check_regressions(results, str(baseline_path))
-        sys.exit(0 if all_pass else 1)
-```
-
-**The exit code matters.** `sys.exit(1)` fails the CI pipeline. This means a quality regression blocks the merge — same as a failing unit test.
+The runner's `__main__` block calls `check_regressions()` and exits with `sys.exit(1)` if any regression is detected — meaning a quality regression blocks CI, same as a failing unit test.
 
 ### Baseline Management
 
-The first time you run the eval suite, there's no baseline file. The runner creates one:
-
-```python
-# Save/update baseline
-baseline_path = results_dir / "eval_baseline.json"
-if baseline is not None and not baseline_path.exists():
-    baseline.to_json(str(baseline_path))
-elif baseline_path.exists():
-    print(f"  Baseline already exists at {baseline_path}")
-    print(f"      Delete it to regenerate from current run.")
-```
-
-The baseline is committed to the repository. To update it (e.g., after an intentional quality change), you delete `results/eval_baseline.json` and re-run. This is deliberate — updating the baseline should be a conscious decision, not something that happens automatically.
+The first time you run the eval suite, there's no baseline file — the runner creates one. The baseline is committed to the repository. To update it (e.g., after an intentional quality change), you delete `results/eval_baseline.json` and re-run. This is deliberate — updating the baseline should be a conscious decision, not something that happens automatically.
 
 **Example baseline file (`results/eval_baseline.json`):**
 
