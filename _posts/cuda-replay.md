@@ -375,7 +375,7 @@ Both paths generate grammatically-structured gibberish of similar quality — wh
 
 ## Benchmark results
 
-The model is intentionally tiny: 57K parameters, 4 layers, 4 heads, `block_size=64`, trained for 1,000 steps on a Shakespeare corpus. Everything runs on a single GPU. The question is not "how fast is this model" but "does CUDA graph replay eliminate kernel launch overhead in the way the theory predicts?"
+The model is intentionally tiny: 57K parameters, 4 layers, 4 heads, `block_size=64`, trained for 1,000 steps on a Shakespeare corpus. Everything runs on a single mobile laptop GPU. The question is not "how fast is this model" but "does CUDA graph replay eliminate kernel launch overhead in the way the theory predicts?"
 
 The benchmark suite runs five named configurations — each varying prompt length and generation length — plus a generation length sweep that holds the prompt fixed at 8 tokens and varies `N` from 8 to 56.
 
