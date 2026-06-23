@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "NanoGPT: Guided Decoding"
-date: 2026-06-22
+date: 2026-06-23
 ---
 
 # Guided Decoding: Teaching a Language Model to Color Inside the Lines
