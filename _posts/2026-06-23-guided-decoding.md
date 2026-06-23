@@ -33,6 +33,8 @@ Guided decoding:
   token = sample(probs)             # guaranteed to satisfy constraint
 ```
 
+![Guided Decoding](/images/guided_decoding_thumbnail.png)
+
 This post walks through a from-scratch implementation of guided decoding for NanoGPT, building from the simplest possible version to a finite state machine that compiles patterns into per-step token masks.
 
 ---
@@ -248,6 +250,8 @@ State 4 ──[a-z]──→ State 4        (self-loop: more lowercase ok)
 State 4 ──[\n]───→ State 5        (newline terminates) → ACCEPT
 ```
 
+![FSM State Diagram](/images/guided_decoding_fsm.png)
+
 Built manually:
 
 ```python
@@ -292,9 +296,6 @@ def generate_guided(model, idx, fsm, max_new_tokens):
     return idx
 ```
 
-Three new lines in the generate loop.
-The KV cache is untouched.
-The model forward pass is untouched.
 The FSM runs entirely on the CPU, as a pure Python set lookup - no tensors, no gradients, no GPU involvement.
 
 ### Test Results: Shakespeare Format
@@ -316,9 +317,7 @@ Every single output matches the pattern `[A-Z]+: [a-z]+\n`.
 Let's break down what these results demonstrate:
 
 **Constraint satisfaction is absolute.**
-Across all 5 runs, every output has uppercase letters, then a colon, then a space, then lowercase letters, then a newline.
-No exceptions.
-The FSM makes constraint violation impossible by construction - tokens that would violate the pattern never receive probability mass.
+Across all 5 runs, every output has uppercase letters, then a colon, then a space, then lowercase letters, then a newline. The FSM makes constraint violation impossible by construction - tokens that would violate the pattern never receive probability mass.
 
 **The model still has preferences.**
 The outputs aren't random character salad.
@@ -427,7 +426,6 @@ The compile_pattern output is indistinguishable from the manually constructed FS
 ## The Orthogonality Argument
 
 The most important design property of guided decoding is that it's **orthogonal to every other inference optimization**.
-Let me be precise about what this means.
 
 The masking step operates on a logits tensor of shape `(vocab_size,)`.
 It doesn't know or care how those logits were produced.
@@ -440,10 +438,8 @@ They could come from:
 - A paged attention implementation
 - A quantized model
 
-All of these produce a logits tensor.
-All of them feed it into softmax.
+All of these produce a logits tensor and feed it into softmax.
 Guided decoding inserts one operation between those two steps: `logits[disallowed] = -inf`.
-That's it.
 The generate loop gains 3 lines (`allowed_tokens`, `apply_token_mask`, `advance`), and everything upstream is untouched.
 
 This is why production engines implement guided decoding as a separate module.
@@ -499,7 +495,6 @@ The full implementation (`nanogpt-guided-decoding.py`) adds 6 new components to 
 
 Total new code: ~107 lines.
 The model architecture, KV cache, training loop, and embedding tables are completely unchanged from `nanogpt-kv-cache.py`.
-Guided decoding is purely additive.
 
 ---
 
@@ -509,19 +504,16 @@ Guided decoding inserts a single masking step into the generate loop to guarante
 The implementation has three levels of increasing sophistication:
 
 1. **Static masks** establish the core mechanism: create a boolean mask, apply it to logits before softmax.
-One new line in the generate loop.
 
 2. **Finite state machines** handle variable-length patterns by tracking position in a state diagram.
 The FSM reports allowed tokens at each step and advances on sample.
-Three new lines in the generate loop.
 
 3. **Pattern compilation** automates FSM construction from a declarative specification.
 Walk through pattern elements, emit states and transitions.
-~20 lines of code replacing manual FSM construction.
 
-The system achieves 100% constraint satisfaction across all tests.
-The model's learned preferences are preserved within the allowed token space.
-And the entire implementation is orthogonal to the model architecture, KV cache, and every other inference optimization in the NanoGPT stack.
+The system achieves 100% constraint satisfaction across all tests and the model's learned preferences are preserved within the allowed token space.
+
+The entire implementation is orthogonal to the model architecture, KV cache, and every other inference optimization in the NanoGPT stack.
 
 You can find the code in `nanogpt-guided-decoding.py` in my nanoGPT inference repository, [here.](https://github.com/czhou578/nanoGPT-inference/tree/guided-decoding)
 
