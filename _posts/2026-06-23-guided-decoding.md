@@ -33,7 +33,7 @@ Guided decoding:
   token = sample(probs)             # guaranteed to satisfy constraint
 ```
 
-![Guided Decoding](/images/guided_decoding_thumbnail.png)
+![Guided Decoding]({{ site.baseurl }}/images/guided_decoding_thumbnail.png)
 
 This post walks through a from-scratch implementation of guided decoding for NanoGPT, building from the simplest possible version to a finite state machine that compiles patterns into per-step token masks.
 
@@ -250,7 +250,7 @@ State 4 ──[a-z]──→ State 4        (self-loop: more lowercase ok)
 State 4 ──[\n]───→ State 5        (newline terminates) → ACCEPT
 ```
 
-![FSM State Diagram](/images/guided_decoding_fsm.png)
+![FSM State Diagram]({{ site.baseurl }}/images/guided_decoding_fsm.png)
 
 Built manually:
 
