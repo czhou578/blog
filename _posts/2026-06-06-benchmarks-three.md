@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Part 3: Speculative Decoding — Trading Accuracy for Parallelism"
+title: "Part 3: Speculative Decoding - Trading Accuracy for Parallelism"
 date: 2026-06-06
 ---
 
@@ -8,13 +8,13 @@ Autoregressive decoding is stubbornly serial. Each token depends on the previous
 
 **Speculative decoding** breaks this pattern. A cheap draft model proposes several future tokens. The target model verifies the entire proposed sequence in a single forward pass. When the draft is right, multiple tokens are emitted from one target call. When it is wrong, the target model corrects the first rejected position and continues.
 
-This post benchmarks two draft models — a bigram table and a trigram table — against standard KV-cached decoding on a tiny NanoGPT. The draft models are intentionally primitive. They exist to test the mechanism, not to approximate production quality.
+This post benchmarks two draft models - a bigram table and a trigram table - against standard KV-cached decoding on a tiny NanoGPT. The draft models are intentionally primitive. They exist to test the mechanism, not to approximate production quality.
 
 The results demonstrate a consistent pattern:
 
 - Throughput improves by **1.40x to 2.13x** across all configurations.
 - Target forward calls drop to **40–62%** of the KV baseline.
-- The target model evaluates **more total tokens**, not fewer — but packages them into fewer calls.
+- The target model evaluates **more total tokens**, not fewer - but packages them into fewer calls.
 
 The core tradeoff is clear: speculative decoding does not reduce the total work the target model performs. It reduces the number of times the target model is invoked.
 
@@ -39,7 +39,7 @@ The model trains briefly before each benchmark run:
 | 100 | 2.8321 | 2.8682 |
 | 119 | 2.7759 | 2.7995 |
 
-Generated samples are noisy. That is expected from a tiny character-level model. These benchmarks measure serving mechanics — forward call counts, acceptance rates, verification sizes, throughput — not output quality.
+Generated samples are noisy. That is expected from a tiny character-level model. These benchmarks measure serving mechanics - forward call counts, acceptance rates, verification sizes, throughput - not output quality.
 
 ## The mechanism
 
@@ -72,7 +72,7 @@ The simplest possible draft model. It conditions on exactly one token:
 P(next_token | current_token)
 ```
 
-This is not a neural network. It is a transition-count table built from training data. It puts a hard ceiling on acceptance — bigram statistics are a weak approximation of a transformer — but it makes the benchmark easy to run and easy to reason about.
+This is not a neural network. It is a transition-count table built from training data. It puts a hard ceiling on acceptance - bigram statistics are a weak approximation of a transformer - but it makes the benchmark easy to run and easy to reason about.
 
 ### Bigram results
 
@@ -188,7 +188,7 @@ Shorter chains (K=2) produce more bonus tokens. Longer chains (K=6) produce more
 
 Latency improvement tracks target call reduction directly. Fewer decode iterations means each request finishes sooner.
 
-TTFT improves only slightly — both methods perform the same prompt prefill before emitting the first token. Speculative decoding is a decode-phase optimization.
+TTFT improves only slightly - both methods perform the same prompt prefill before emitting the first token. Speculative decoding is a decode-phase optimization.
 
 ### Draft noise
 
@@ -258,7 +258,7 @@ One caveat: the `k2_trigram_draft` KV baseline is significantly slower than othe
 | `k4_noisy_trigram` | 128 | 65 | 49.2% |
 | `longer_outputs_k4_trigram` | 144 | 68 | 52.8% |
 
-The same pattern holds. Each verification step can emit one or more tokens — even when many candidates are rejected, a corrected token is still produced.
+The same pattern holds. Each verification step can emit one or more tokens - even when many candidates are rejected, a corrected token is still produced.
 
 ### The cost: more target tokens
 
@@ -322,7 +322,7 @@ K=2 produces the most bonus tokens. K=6 produces the fewest. Resampling is commo
 
 Latency improves because each request needs fewer target-model iterations.
 
-TTFT improves slightly but is not the primary benefit — both methods perform the same prompt prefill before emitting the first token.
+TTFT improves slightly but is not the primary benefit - both methods perform the same prompt prefill before emitting the first token.
 
 ### Draft noise (trigram)
 
@@ -353,7 +353,7 @@ The two draft models demonstrate the same mechanism with different trade-off pro
 | Bigram | 1.54x – 1.78x | 34.7% – 63.6% | 0.40x – 0.49x |
 | Trigram | 1.40x – 2.13x | 25.7% – 39.9% | 0.47x – 0.62x |
 
-The bigram achieves higher acceptance rates across the board. The trigram's additional context does not translate into better acceptance in these runs — likely because the trigram table is smoothed and the tiny model's distributions are noisy enough that a two-token context window does not provide a meaningful advantage over a one-token window.
+The bigram achieves higher acceptance rates across the board. The trigram's additional context does not translate into better acceptance in these runs - likely because the trigram table is smoothed and the tiny model's distributions are noisy enough that a two-token context window does not provide a meaningful advantage over a one-token window.
 
 Both drafts confirm the central finding: speculative decoding produces speedups even with crude drafts and low acceptance, because reducing the number of serial target calls is the dominant lever.
 
@@ -380,7 +380,7 @@ The mechanism works even with primitive drafts:
 - **Latency** drops because each request needs fewer decode iterations.
 - **Longer decode workloads** benefit more, since speculation has more opportunities to collapse serial forwards into verification batches.
 
-The limiting factor is draft quality. Acceptance rates range from 25.7% to 63.6% with these table-based drafts. A stronger draft model — even a small neural one — would raise acceptance, reduce wasted verification tokens, and make deeper speculation (`K > 4`) more effective.
+The limiting factor is draft quality. Acceptance rates range from 25.7% to 63.6% with these table-based drafts. A stronger draft model - even a small neural one - would raise acceptance, reduce wasted verification tokens, and make deeper speculation (`K > 4`) more effective.
 
 The practical mental model:
 

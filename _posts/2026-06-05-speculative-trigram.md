@@ -6,7 +6,7 @@ date: 2026-06-05
 
 Speculative decoding uses a cheap draft model to propose candidate tokens, then verifies them against the target model in a single forward pass. The draft model does not need to be good. It needs to be cheap, plausible, and able to return the probability of whatever it sampled.
 
-The [previous speculative decoding post](/blog/2026/05/26/spec-decode) used a bigram draft, just like the one from Andrej Karpathy's original nanoGPT implementation — one token of context, one lookup table:
+The [previous speculative decoding post](/blog/2026/05/26/spec-decode) used a bigram draft, just like the one from Andrej Karpathy's original nanoGPT implementation - one token of context, one lookup table:
 
 ```text
 P(next_token | current_token)
@@ -44,7 +44,7 @@ The trigram table is a 3D count tensor:
 counts[a, b, c] = number of times token c followed context (a, b)
 ```
 
-For a character-level Shakespeare vocabulary of ~65 tokens, this table has `65 × 65 × 65 = 274,625` entries. Compared to the bigram table, this sounds large. In absolute terms, it is a few hundred thousand floats — no matrix multiplications, no attention, no layers. Just indexing.
+For a character-level Shakespeare vocabulary of ~65 tokens, this table has `65 × 65 × 65 = 274,625` entries. Compared to the bigram table, this sounds large. In absolute terms, it is a few hundred thousand floats - no matrix multiplications, no attention, no layers. Just indexing.
 
 ```python
 class TrigramDraftModel:
@@ -174,7 +174,7 @@ def sample(self, prev_token_id, token_id, *, temperature=1.0, generator=None):
     return next_token, probs
 ```
 
-Both the sampled token and the distribution that produced it are returned. The second return value is not optional — the speculative accept/reject step requires the draft probability of each sampled token.
+Both the sampled token and the distribution that produced it are returned. The second return value is not optional - the speculative accept/reject step requires the draft probability of each sampled token.
 
 ## Drafting candidates
 
@@ -314,7 +314,7 @@ trigram: P(next | previous, current)
 
 That extra context produces sharper draft predictions, which should increase acceptance and improve throughput. Bigram fallback prevents the model from over-trusting rare trigram contexts.
 
-The broader point is not that a trigram is a good language model. It is not. The point is that speculative decoding rewards any cheap model that is just good enough to guess ahead — and a trigram table is one step closer to "good enough" than a bigram.
+The broader point is not that a trigram is a good language model. It is not. The point is that speculative decoding rewards any cheap model that is just good enough to guess ahead - and a trigram table is one step closer to "good enough" than a bigram.
 
 You can find the entire code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-trigram-spec-decode.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-trigram-spec-decode.py)
 

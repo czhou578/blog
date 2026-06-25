@@ -10,7 +10,7 @@ date: 2026-05-29
 
 The issue is that chunked prefill as we currently have it is doing 2 forward passes per step, one for the prefill requests and one for the decode requests. 
 
-On a real GPU, each forward pass has fixed overhead (kernel launches, memory transfers). A production inference engine (vLLM) **interleaves** decode and prefill tokens into a **single forward pass**, because the model doesn't care whether a token in the batch is a decode token or a prefill token — it just sees an input tensor of shape `(B, T)`.
+On a real GPU, each forward pass has fixed overhead (kernel launches, memory transfers). A production inference engine (vLLM) **interleaves** decode and prefill tokens into a **single forward pass**, because the model doesn't care whether a token in the batch is a decode token or a prefill token - it just sees an input tensor of shape `(B, T)`.
 
 **Decode-prefill interleaving** merges both types of work into one `model()` call per step. The token budget constrains total tokens per step, decode requests get first priority (they're cheap and already own KV memory), and the remaining budget goes to prefill chunks.
 
@@ -61,7 +61,7 @@ Right now, the `assemble_batch_cache` only handles decode requests (all with T=1
 
 But we now need to assemble a cache that includes:
 
-- **Decode requests:** have a populated `kv_cache` — same as before
+- **Decode requests:** have a populated `kv_cache` - same as before
 - **Prefilling request (continuation chunk):** may have a partial `kv_cache` from earlier chunks, OR no cache at all (first chunk)
 
 When a prefill request has `past_k` of shape `(1, T_past, hs)` and its chunk has `T_chunk` tokens, the model will output `new_k` of shape `(1, T_past + T_chunk, hs)`. But decode requests output `new_k` of shape `(1, T_past_i + 1, hs)`. After the fused forward pass, we need to strip padding from **each row independently** during disassembly.
@@ -148,7 +148,7 @@ def assemble_fused_batch(decode_reqs: List[Request], prefill_req, chunk_size):
 
 In this new function, we first create two empty lists, `all_reqs` and `num_new_tokens` to keep track of the requests and how many tokens each will contribute to the batch. 
 
-Each decode request is added to the `all_reqs` list and its token count is recorded as 1. A reminder that decode requests always contribute exactly one token per step — they're already done with prefill and are just generating the next token autoregressively.  
+Each decode request is added to the `all_reqs` list and its token count is recorded as 1. A reminder that decode requests always contribute exactly one token per step - they're already done with prefill and are just generating the next token autoregressively.  
 
 If there is an active prefilling request, it's appended last to `all_reqs` and its contribution is `chunk_size` tokens (chunked prefill!).
 
@@ -169,15 +169,15 @@ The absolute position indices for the tokens are calculated the same way as befo
 
 Then, the Python lists-of-lists are converted into `(B, T_max)` PyTorch tensors and moved onto the appropriate device (CPU/GPU). `dtype=torch.long` is required for token IDs since they're used as indices into the embedding table.
 
-Next, we want to check if there's a prefill request and that it has no KV Cache, which is true for the very first chunk. For every layer `li` and every head `hi`, it initializes the KV cache as a pair of empty tensors of shape `(1, 0, head_size)`. The `T=0` dimension means "no cached tokens yet." This is the canonical "empty past" representation — assemble_batch_cache downstream expects every request to have a `kv_cache` dict, and empty tensors serve as a valid zero-length cache.
+Next, we want to check if there's a prefill request and that it has no KV Cache, which is true for the very first chunk. For every layer `li` and every head `hi`, it initializes the KV cache as a pair of empty tensors of shape `(1, 0, head_size)`. The `T=0` dimension means "no cached tokens yet." This is the canonical "empty past" representation - assemble_batch_cache downstream expects every request to have a `kv_cache` dict, and empty tensors serve as a valid zero-length cache.
 
 After calling our previous `assemble_batch_cache` function, we can now proceed to return everything that we need for a single fused forward pass of the model: 
 
-- `batch_tokens` — what to feed the embedding layer
-- `batch_positions` — for positional embeddings
-- `past_kvs` — the batched KV context for attention
-- `attn_mask` — which cache positions to attend to
-- `pad_lengths` — bookkeeping so `disassemble_fused_batch` can correctly unpack each row's new KV cache after the forward pass
+- `batch_tokens` - what to feed the embedding layer
+- `batch_positions` - for positional embeddings
+- `past_kvs` - the batched KV context for attention
+- `attn_mask` - which cache positions to attend to
+- `pad_lengths` - bookkeeping so `disassemble_fused_batch` can correctly unpack each row's new KV cache after the forward pass
 
 ## Disassemble Fused Cache
 
@@ -263,7 +263,7 @@ But now, we want to handle both cases in one function. So we modify the `Head.fo
 ```python
 
 class Head(nn.Module):
-    """One head of self-attention — now STATELESS (no internal cache)."""
+    """One head of self-attention - now STATELESS (no internal cache)."""
 
     def __init__(self, head_size):
         super().__init__()
@@ -701,7 +701,7 @@ If we processed a prefill chunk and it reached the end of its prompt (`is_fully_
 
 3. **Disassembly: different numbers of new tokens per row.** After the fused forward pass, decode row `i` produced `(T_past_i + 1)` cache entries. The prefill row produced `(T_past_prefill + chunk_size)` entries. Both need their left-padding stripped. Track `pad_lengths` per row during assembly and use them during disassembly.
 
-4. **Logit extraction.** `logits[:, -1, :]` gives you the last-position logits for every row. For decode rows, this is the next token prediction (correct). For the prefill row, this is the logit after the last token in the chunk — which is only the "first generated token" if the chunk completes the prefill. If the chunk is partial, you don't sample from it; you just cache the KV and move on. Be careful not to sample from a partial prefill row.
+4. **Logit extraction.** `logits[:, -1, :]` gives you the last-position logits for every row. For decode rows, this is the next token prediction (correct). For the prefill row, this is the logit after the last token in the chunk - which is only the "first generated token" if the chunk completes the prefill. If the chunk is partial, you don't sample from it; you just cache the KV and move on. Be careful not to sample from a partial prefill row.
 
 5. **Empty decode batch.** When there are no active decode requests (only a prefilling request), the batch is just the prefill chunk. This degenerates to a standard prefill call. Make sure your code handles `len(decode_reqs) == 0` gracefully.
 

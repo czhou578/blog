@@ -7,7 +7,7 @@ image: https://czhou578.github.io/blog/images/sglang_node_data.png
 
 RadixAttention was the reason I built the radix tree in the first place. SGLang's [original paper](https://arxiv.org/abs/2312.07104) introduced the idea of using a radix tree to manage KV cache sharing across requests, and I wanted to understand it from the ground up by implementing it myself in NanoGPT.
 
-Now that I've done that, I went back and read SGLang's actual `radix_cache.py` — all ~800 lines of it — to see how the production version compares. The experience was humbling. The core algorithm is the same: compressed trie, prefix matching, node splitting. But SGLang makes a handful of non-obvious design choices that completely change the performance characteristics, and I want to walk through the ones that surprised me most.
+Now that I've done that, I went back and read SGLang's actual `radix_cache.py` - all ~800 lines of it - to see how the production version compares. The experience was humbling. The core algorithm is the same: compressed trie, prefix matching, node splitting. But SGLang makes a handful of non-obvious design choices that completely change the performance characteristics, and I want to walk through the ones that surprised me most.
 
 ## The shape of the two systems
 
@@ -51,7 +51,7 @@ Here are the two stacks, top to bottom:
 └─────────────────────────────────────────────┘
 ```
 
-SGLang has five layers. We have three. But the biggest difference is hiding in the node objects — and it's the same lesson as the vLLM comparison.
+SGLang has five layers. We have three. But the biggest difference is hiding in the node objects - and it's the same lesson as the vLLM comparison.
 
 ## The node tells you everything
 
@@ -94,7 +94,7 @@ class RadixNode:
         self.last_access_time: int = 0
 ```
 
-The field that matters most is `value` vs `kv_data`. SGLang's `value` is a 1D `torch.int64` tensor — a list of **indices** into a shared GPU memory pool. The actual KV tensors live elsewhere, pre-allocated on the GPU. The node just says "my KV data is at pool slots [47, 48, 49, 50]." Our `kv_data` is a dict of actual KV tensors, stored right on the node.
+The field that matters most is `value` vs `kv_data`. SGLang's `value` is a 1D `torch.int64` tensor - a list of **indices** into a shared GPU memory pool. The actual KV tensors live elsewhere, pre-allocated on the GPU. The node just says "my KV data is at pool slots [47, 48, 49, 50]." Our `kv_data` is a dict of actual KV tensors, stored right on the node.
 
 This sounds like a minor detail. It isn't.
 
@@ -102,26 +102,26 @@ This sounds like a minor detail. It isn't.
 |---------|--------|---------|
 | KV data storage | `value` = `torch.Tensor` of **indices** into a shared GPU memory pool | `kv_data` = dict of actual KV **tensors** stored on the node |
 | Edge label | `RadixKey` object (supports bigram, extra_key, page alignment) | Raw `tuple[int, ...]` |
-| Children dict | `defaultdict(TreeNode)` — auto-creates on access | `Dict[int, RadixNode]` — standard dict |
-| Access tracking | `time.monotonic()` — real wall-clock time | Integer step counter |
-| Hit counting | `hit_count` — tracks how often a node is matched | Not implemented |
+| Children dict | `defaultdict(TreeNode)` - auto-creates on access | `Dict[int, RadixNode]` - standard dict |
+| Access tracking | `time.monotonic()` - real wall-clock time | Integer step counter |
+| Hit counting | `hit_count` - tracks how often a node is matched | Not implemented |
 | Priority | Per-node `priority` for priority-aware eviction | Not implemented |
 | Host offload | `host_value` + `host_ref_counter` for CPU ↔ GPU tiering | Not implemented |
 
-When a request in SGLang matches a prefix, it gets back those indices and uses them directly — no copying. Two requests sharing a 200-token prefix point to the same 200 pool slots. Zero additional GPU memory.
+When a request in SGLang matches a prefix, it gets back those indices and uses them directly - no copying. Two requests sharing a 200-token prefix point to the same 200 pool slots. Zero additional GPU memory.
 
-When a request in NanoGPT matches a prefix, `load_from_radix_tree()` **clones** every `(layer, head)` tensor pair onto the request's private cache. Two requests sharing a 200-token prefix? That's 2× the memory. Same pattern we saw in the vLLM comparison — the "indices vs data" design decision ripples through everything downstream.
+When a request in NanoGPT matches a prefix, `load_from_radix_tree()` **clones** every `(layer, head)` tensor pair onto the request's private cache. Two requests sharing a 200-token prefix? That's 2× the memory. Same pattern we saw in the vLLM comparison - the "indices vs data" design decision ripples through everything downstream.
 
 ## Edge labels are not just labels
 
-This is something I didn't appreciate until I read SGLang's code. In our implementation, an edge is just `tuple[int, ...]` — a sequence of token IDs. In SGLang, it's a full `RadixKey` object:
+This is something I didn't appreciate until I read SGLang's code. In our implementation, an edge is just `tuple[int, ...]` - a sequence of token IDs. In SGLang, it's a full `RadixKey` object:
 
 ```python
 class RadixKey:
     __slots__ = ("token_ids", "extra_key", "is_bigram")
 
     def __init__(self, token_ids: array[int], extra_key=None, is_bigram=False):
-        self.token_ids = token_ids     # array('q', [...]) — compact C array
+        self.token_ids = token_ids     # array('q', [...]) - compact C array
         self.extra_key = extra_key     # LoRA ID, cache salt, etc.
         self.is_bigram = is_bigram     # EAGLE speculative decoding mode
 
@@ -137,12 +137,12 @@ Three things stand out:
 
 **Second**, `extra_key` enables namespace isolation. If you're serving multiple LoRA adapters or using cache salts for security isolation, two sequences with the same tokens but different `extra_key` values don't share cache. We don't support this at all.
 
-**Third**, the matching algorithm itself. SGLang uses **exponential search**: start comparing 1 token, then 2, then 4, then 8, doubling each time. The moment a comparison fails, binary-search within that window to find the exact divergence point. For an edge with 1,000 matching tokens, that's ~10 C-level slice comparisons (exponential galloping) plus ~10 more (binary search) — roughly 20 operations total. We do 1,000 Python iterations. The asymptotic difference is O(log n) vs O(n), but the constant-factor difference is even bigger because SGLang never enters a Python `for` loop at all.
+**Third**, the matching algorithm itself. SGLang uses **exponential search**: start comparing 1 token, then 2, then 4, then 8, doubling each time. The moment a comparison fails, binary-search within that window to find the exact divergence point. For an edge with 1,000 matching tokens, that's ~10 C-level slice comparisons (exponential galloping) plus ~10 more (binary search) - roughly 20 operations total. We do 1,000 Python iterations. The asymptotic difference is O(log n) vs O(n), but the constant-factor difference is even bigger because SGLang never enters a Python `for` loop at all.
 
 | Feature | SGLang | NanoGPT |
 |---------|--------|---------|
-| Data type | `array('q', ...)` — C-level int64 array | Python `tuple[int, ...]` |
-| Matching algorithm | Exponential search + binary search — O(log n) slice compares | Linear scan — O(n) per-token Python loop |
+| Data type | `array('q', ...)` - C-level int64 array | Python `tuple[int, ...]` |
+| Matching algorithm | Exponential search + binary search - O(log n) slice compares | Linear scan - O(n) per-token Python loop |
 | Page alignment | `page_aligned(page_size)` truncates to page boundary | Manual `(matched // block_size) * block_size` |
 | Namespace isolation | `extra_key` separates LoRA adapters, cache salts | Not supported |
 | Bigram mode | `is_bigram=True` for EAGLE speculative decoding | Not supported |
@@ -207,16 +207,16 @@ def match_prefix(self, token_ids):
 
 Squint at these and they're the same function. Walk down, compare edges, split on partial match, advance. The differences:
 
-- SGLang returns **KV indices** directly (`value` list) — the caller can hand these straight to the GPU kernel. We return a `(node, match_count)` pair that the caller has to walk to extract KV data.
-- SGLang updates `last_access_time` on every traversed node during the match. We don't — our access times only update during lock/unlock.
+- SGLang returns **KV indices** directly (`value` list) - the caller can hand these straight to the GPU kernel. We return a `(node, match_count)` pair that the caller has to walk to extract KV data.
+- SGLang updates `last_access_time` on every traversed node during the match. We don't - our access times only update during lock/unlock.
 - SGLang uses `RadixKey.match()` (exponential search) for edge comparison. We use a per-token `while` loop.
 
 | Feature | SGLang | NanoGPT |
 |---------|--------|---------|
-| Return value | `(List[torch.Tensor], TreeNode)` — concatenated KV indices + last node | `(RadixNode, int)` — last node + match count |
-| Edge matching | `RadixKey.match()` — exponential search | Per-token `while` loop |
+| Return value | `(List[torch.Tensor], TreeNode)` - concatenated KV indices + last node | `(RadixNode, int)` - last node + match count |
+| Edge matching | `RadixKey.match()` - exponential search | Per-token `while` loop |
 | Access time update | `time.monotonic()` on every traversed node | Not updated during match |
-| Split on partial match | Yes — identical logic | Yes — identical logic |
+| Split on partial match | Yes - identical logic | Yes - identical logic |
 
 ## Node splitting: where "indices vs data" really bites
 
@@ -269,17 +269,17 @@ def _split_node(self, child, split_len):
     return new_mid
 ```
 
-See the difference? SGLang's split clones a 1D int64 tensor — one `value[:split_len].clone()` call. That's it. It's slicing a list of pool indices.
+See the difference? SGLang's split clones a 1D int64 tensor - one `value[:split_len].clone()` call. That's it. It's slicing a list of pool indices.
 
 Our split has to iterate over every `(layer, head)` pair and clone 3D KV tensors for both halves. For a model with 6 layers and 6 heads, that's 72 tensor allocations (36 for the new mid-node, 36 for the truncated child). For a production model with 80 layers and 128 heads? You don't want to think about it.
 
 | Feature | SGLang | NanoGPT |
 |---------|--------|---------|
-| Value split | `value[:split_len].clone()` — slicing a 1D index tensor | Per-(layer, head) 3D tensor slicing + clone |
-| Cost | O(split_len) — single tensor clone | O(n_layer × n_head × split_len) — many tensor clones |
+| Value split | `value[:split_len].clone()` - slicing a 1D index tensor | Per-(layer, head) 3D tensor slicing + clone |
+| Cost | O(split_len) - single tensor clone | O(n_layer × n_head × split_len) - many tensor clones |
 | Hash split | `split_node_hash_value()` preserves per-page hashes | Not applicable |
 
-This is the single most convincing argument for the "indices not data" design. Every tree mutation — split, insert, evict — becomes dramatically cheaper when you're manipulating a list of integers instead of actual tensor data.
+This is the single most convincing argument for the "indices not data" design. Every tree mutation - split, insert, evict - becomes dramatically cheaper when you're manipulating a list of integers instead of actual tensor data.
 
 ## Eviction: surgical precision vs no eviction at all
 
@@ -308,18 +308,18 @@ def evict(self, params: EvictParams):
             heapq.heappush(eviction_heap, (new_priority, x.parent))
 ```
 
-SGLang maintains a set of `evictable_leaves` — nodes that are leaves and have `lock_ref == 0`. When the allocator runs out of memory, `evict()` builds a min-heap of these leaves by priority, pops the lowest-priority leaf, frees its KV indices back to the pool, and deletes it from the tree. If the parent becomes childless and unlocked, it cascades into a new evictable leaf and gets pushed onto the heap.
+SGLang maintains a set of `evictable_leaves` - nodes that are leaves and have `lock_ref == 0`. When the allocator runs out of memory, `evict()` builds a min-heap of these leaves by priority, pops the lowest-priority leaf, frees its KV indices back to the pool, and deletes it from the tree. If the parent becomes childless and unlocked, it cascades into a new evictable leaf and gets pushed onto the heap.
 
 This is beautiful. You can surgically reclaim memory from unused suffixes while keeping shared prefixes intact. If 8 requests branched from the same system prompt and 7 of them have finished, the 7 leaf nodes get evicted but the shared trunk stays. The 8th request is unaffected.
 
-NanoGPT? Our tree just grows. Nodes are never deleted. Memory management happens at the request level — the scheduler's `_maybe_preempt()` kicks out entire requests when KV token count exceeds a threshold. If a tree node holds actual tensor data (and ours do), that memory is pinned until the process exits. This was a deliberate simplification, but it means our tree is really a write-only cache, not a managed memory structure.
+NanoGPT? Our tree just grows. Nodes are never deleted. Memory management happens at the request level - the scheduler's `_maybe_preempt()` kicks out entire requests when KV token count exceeds a threshold. If a tree node holds actual tensor data (and ours do), that memory is pinned until the process exits. This was a deliberate simplification, but it means our tree is really a write-only cache, not a managed memory structure.
 
 | Feature | SGLang | NanoGPT |
 |---------|--------|---------|
 | Eviction granularity | Per-node (leaf-first) | Per-request (whole request preempted) |
 | Eviction trigger | `evict(num_tokens)` called when allocator runs out | `_maybe_preempt()` when KV tokens > threshold |
 | Eviction strategy | Pluggable (`lru`, `priority`, custom) via `eviction_strategy` | Not applicable at tree level |
-| Leaf tracking | `evictable_leaves: set` — maintained incrementally | Not tracked |
+| Leaf tracking | `evictable_leaves: set` - maintained incrementally | Not tracked |
 | Parent cascading | After deleting leaf, parent may become new evictable leaf | Not applicable |
 | Locked nodes | `lock_ref > 0` prevents eviction | `lock_ref > 0` prevents eviction (but at request level) |
 
@@ -356,11 +356,11 @@ Our version is four lines. The tradeoff: we don't know how much memory is evicta
 | Walk direction | Leaf → root (same) | Leaf → root (same) |
 | Size accounting | `evictable_size_` / `protected_size_` updated on transitions | Not tracked |
 | Leaf status | `_update_leaf_status()` maintains evictable set | Not tracked |
-| Path storage | Stored on `req.last_node` — only the leaf, walks up | Stored on `request._radix_path` — entire path list |
+| Path storage | Stored on `req.last_node` - only the leaf, walks up | Stored on `request._radix_path` - entire path list |
 
 ## Insertion: one pass vs two passes
 
-SGLang inserts in a single iterative walk — it walks the existing prefix, splitting where necessary, and only creates a new node for the truly new suffix. Along the way it increments hit counts, propagates priorities, tracks evictable sizes, and deduplicates KV indices.
+SGLang inserts in a single iterative walk - it walks the existing prefix, splitting where necessary, and only creates a new node for the truly new suffix. Along the way it increments hit counts, propagates priorities, tracks evictable sizes, and deduplicates KV indices.
 
 ```python
 # SGLang
@@ -415,8 +415,8 @@ Our two-phase approach is cleaner to read, but it can't update metadata along th
 
 The last difference is in how the tree integrates with the rest of the system. SGLang has dedicated methods for both finished and unfinished requests:
 
-- `cache_finished_req()` — inserts the full sequence (prompt + output) into the tree, frees duplicate indices, decrements locks
-- `cache_unfinished_req()` — inserts partial progress (chunked prefill), re-matches to get updated indices, transfers locks
+- `cache_finished_req()` - inserts the full sequence (prompt + output) into the tree, frees duplicate indices, decrements locks
+- `cache_unfinished_req()` - inserts partial progress (chunked prefill), re-matches to get updated indices, transfers locks
 
 NanoGPT does this manually in the generation loop:
 
@@ -429,12 +429,12 @@ scheduler.radix_tree.unlock_radix_path(prefill_req)
 scheduler.radix_tree.unlock_radix_path(req)
 ```
 
-SGLang's `cache_unfinished_req()` is particularly interesting — it handles the case where a request is mid-prefill and the tree has been modified by other requests since the last step. It re-matches the prefix, transfers lock references from the old node to the new one, and adjusts KV indices. We don't handle this at all; we only insert into the tree when prefill is fully complete.
+SGLang's `cache_unfinished_req()` is particularly interesting - it handles the case where a request is mid-prefill and the tree has been modified by other requests since the last step. It re-matches the prefix, transfers lock references from the old node to the new one, and adjusts KV indices. We don't handle this at all; we only insert into the tree when prefill is fully complete.
 
 | Feature | SGLang | NanoGPT |
 |---------|--------|---------|
-| Finished request caching | `cache_finished_req()` — handles dedup, index transfer, lock release | `insert_into_radix_tree()` — manual call in loop |
-| Unfinished request caching | `cache_unfinished_req()` — incremental caching during chunked prefill | Not implemented — only inserts on prefill completion |
+| Finished request caching | `cache_finished_req()` - handles dedup, index transfer, lock release | `insert_into_radix_tree()` - manual call in loop |
+| Unfinished request caching | `cache_unfinished_req()` - incremental caching during chunked prefill | Not implemented - only inserts on prefill completion |
 | Index deduplication | Frees indices that were already in tree | Not applicable (copies data, doesn't share indices) |
 | Lock transfer | `dec_lock_ref(old_node)` → `inc_lock_ref(new_node)` atomically | Manual lock/unlock at separate points |
 
@@ -463,7 +463,7 @@ The three biggest differences between our radix tree and SGLang's all trace back
 
 **1. Indices vs data.** SGLang's tree nodes store a 1D int64 tensor of pool indices. Splitting a node is one tensor slice. Matching a prefix returns indices the GPU can use directly. Sharing a prefix costs zero additional memory. Our nodes store the actual KV tensors, so splitting is O(n_layer × n_head) tensor allocations, matching requires cloning data onto each request, and sharing duplicates everything. One field, cascading consequences.
 
-**2. Fine-grained eviction vs none.** Because SGLang's nodes hold lightweight indices, evicting a leaf means freeing a handful of integers back to the allocator — fast and surgical. Our nodes hold heavy tensor data, so we punted on tree-level eviction entirely. Memory management happens at the request level (preempt the whole request), which is a much blunter instrument. SGLang can trim individual unused suffixes; we can only kill entire requests.
+**2. Fine-grained eviction vs none.** Because SGLang's nodes hold lightweight indices, evicting a leaf means freeing a handful of integers back to the allocator - fast and surgical. Our nodes hold heavy tensor data, so we punted on tree-level eviction entirely. Memory management happens at the request level (preempt the whole request), which is a much blunter instrument. SGLang can trim individual unused suffixes; we can only kill entire requests.
 
 **3. Exponential-search matching.** SGLang's `RadixKey.match()` avoids per-token Python iteration by comparing array slices in C, galloping in doubling windows. For an edge with 1,000 matching tokens, SGLang does ~20 C-level slice comparisons. We do 1,000 Python iterations. In multi-turn conversations where shared prefixes can be thousands of tokens long, this is a significant performance difference.
 

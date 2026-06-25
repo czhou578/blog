@@ -10,11 +10,11 @@ image: https://czhou578.github.io/blog/images/chunked_prefill_thumbnail.png
   mermaid.initialize({ startOnLoad: true });
 </script>
 
-In the [previous post](/blog/2026/05/11/adding-continuous-batching), we built a continuous batching scheduler for NanoGPT. Requests can now arrive and leave the decode batch independently — the GPU stays busy, and no request waits for anyone else to finish. But there's still a problem hiding in the prefill step.
+In the [previous post](/blog/2026/05/11/adding-continuous-batching), we built a continuous batching scheduler for NanoGPT. Requests can now arrive and leave the decode batch independently - the GPU stays busy, and no request waits for anyone else to finish. But there's still a problem hiding in the prefill step.
 
 When a new request arrives, we run its entire prompt through the model in one shot. For a 9-token Shakespeare prompt, this is fine. But what if the prompt is 2,000 tokens? Or 8,000? That single prefill forward pass **monopolizes** the GPU for the entire duration, and every request currently decoding has to wait. Their users stare at a frozen cursor. In production, this is called **prefill starvation**, and it's one of the main reasons inference servers implement chunked prefill.
 
-The fix is conceptually simple: instead of processing the whole prompt at once, break it into smaller chunks and interleave them with decode steps. Each scheduler iteration processes one chunk of the prefill *and* one decode step for everyone already active. The prompt still gets fully processed — it just takes a few more iterations, and nobody else gets starved in the meantime.
+The fix is conceptually simple: instead of processing the whole prompt at once, break it into smaller chunks and interleave them with decode steps. Each scheduler iteration processes one chunk of the prefill *and* one decode step for everyone already active. The prompt still gets fully processed - it just takes a few more iterations, and nobody else gets starved in the meantime.
 
 ![Chunked Prefill vs Prefill Starvation]({{ site.baseurl }}/images/chunked_prefill_thumbnail.png)
 
@@ -22,8 +22,8 @@ The fix is conceptually simple: instead of processing the whole prompt at once, 
 
 The key mechanism is a **token budget**: a cap on how many tokens the scheduler can process per iteration. Two types of work compete for this budget:
 
-- **Decode tokens** — 1 token per active request. These are cheap and high priority. A user is watching.
-- **Prefill tokens** — whatever's left of the budget goes to the next chunk of a partially-prefilled request.
+- **Decode tokens** - 1 token per active request. These are cheap and high priority. A user is watching.
+- **Prefill tokens** - whatever's left of the budget goes to the next chunk of a partially-prefilled request.
 
 If we have 3 active decode requests and a token budget of 10, that leaves 7 tokens of budget for prefill work. A 20-token prompt would get processed as three chunks: 7 + 7 + 6. 
 
@@ -31,7 +31,7 @@ If we have 3 active decode requests and a token budget of 10, that leaves 7 toke
 
 The `Request` class from the continuous batching post needs one new field: `prefill_cursor`, an integer tracking how many prompt tokens have been processed so far. A request is "fully prefilled" when `prefill_cursor == len(prompt_tokens)`.
 
-The lifecycle also gains a new state: `waiting` → `prefilling` → `active` → `done`. The `prefilling` state means the prompt is partially processed — some chunks are in the KV cache, but more remain.
+The lifecycle also gains a new state: `waiting` → `prefilling` → `active` → `done`. The `prefilling` state means the prompt is partially processed - some chunks are in the KV cache, but more remain.
 
 ```python
 @dataclass
@@ -46,7 +46,7 @@ class Request:
 
     # Per-request KV cache, keyed by (layer_idx, head_idx)
     # Each value is a (key_tensor, value_tensor) tuple of shape (1, T_i, head_size)
-    # T_i grows by 1 each decode step — different requests have different T_i
+    # T_i grows by 1 each decode step - different requests have different T_i
     kv_cache: Dict[Tuple[int, int], Tuple[torch.Tensor, torch.Tensor]] = field(
         default_factory=dict
     )
@@ -286,11 +286,11 @@ Let's walk through the key changes from the continuous batching version:
 
 ## Testing
 
-**Test 1: regression.** The first test verifies that the new chunked prefill code path doesn't break anything when chunking isn't actually needed. We feed three short prompts (9-12 tokens each) with a generous token budget of 32, which is larger than any prompt. Since no prompt exceeds the budget, every request gets prefilled in a single pass — identical to the old non-chunked behavior. The assertions check that each request completed, generated the correct number of tokens, that the KV cache has the expected sequence length, and that `prefill_cursor` advanced to the end of the prompt. If any of these fail, the chunked prefill refactoring broke the basic continuous batching logic.
+**Test 1: regression.** The first test verifies that the new chunked prefill code path doesn't break anything when chunking isn't actually needed. We feed three short prompts (9-12 tokens each) with a generous token budget of 32, which is larger than any prompt. Since no prompt exceeds the budget, every request gets prefilled in a single pass - identical to the old non-chunked behavior. The assertions check that each request completed, generated the correct number of tokens, that the KV cache has the expected sequence length, and that `prefill_cursor` advanced to the end of the prompt. If any of these fail, the chunked prefill refactoring broke the basic continuous batching logic.
 
 ```python
 # ══════════════════════════════════════════════════════════════════════════════
-# Test 1: Short prompts (no chunking needed) — regression test
+# Test 1: Short prompts (no chunking needed) - regression test
 # ══════════════════════════════════════════════════════════════════════════════
 print("=" * 60)
 print("Test 1: Short prompts (no chunking needed)")
@@ -320,7 +320,7 @@ for req in completed:
     assert req.prefill_cursor == len(req.prompt_tokens), (
         f"Req {req.id}: prefill_cursor={req.prefill_cursor}, expected {len(req.prompt_tokens)}")
 
-print("\n✓ Test 1 passed — short prompts complete correctly (no chunking needed)!")
+print("\n✓ Test 1 passed - short prompts complete correctly (no chunking needed)!")
 ```
 
 The result is 
@@ -350,13 +350,13 @@ Request 2  |  15 tokens  |  status: done
 KING HENRY:
 What of the pet
 
-✓ Test 1 passed — short prompts complete correctly (no chunking needed)!
+✓ Test 1 passed - short prompts complete correctly (no chunking needed)!
 ```
 
-All three requests completed with the correct token counts (17, 22, 15) and correct cache shapes, and the `prefill_cursor` advanced to the full prompt length for each — even though we never actually chunked anything. This matters because chunked prefill touches the same code paths as regular prefill (the `prefill_cursor` logic, the `is_fully_prefilled` check, the budget calculation). If we introduced an off-by-one in the cursor or broke the transition from `"prefilling"` → `"active"`, this test would catch it immediately. It's the safety net that lets us refactor with confidence.
+All three requests completed with the correct token counts (17, 22, 15) and correct cache shapes, and the `prefill_cursor` advanced to the full prompt length for each - even though we never actually chunked anything. This matters because chunked prefill touches the same code paths as regular prefill (the `prefill_cursor` logic, the `is_fully_prefilled` check, the budget calculation). If we introduced an off-by-one in the cursor or broke the transition from `"prefilling"` → `"active"`, this test would catch it immediately. It's the safety net that lets us refactor with confidence.
 
 
-**Test 2: actual chunking.** This test exercises the chunking itself. We feed a single 20-token prompt with a token budget of only 8, forcing the scheduler to split the prefill into three chunks: 8 + 8 + 4 tokens across three separate scheduler iterations. The assertions verify that the request completed with the right number of generated tokens, that `prefill_cursor` reached the full prompt length (confirming all three chunks were processed), and that the KV cache shape matches `prompt_length + generated_tokens - 1` — meaning the chunks were stitched together correctly without any gaps or double-counted positions.
+**Test 2: actual chunking.** This test exercises the chunking itself. We feed a single 20-token prompt with a token budget of only 8, forcing the scheduler to split the prefill into three chunks: 8 + 8 + 4 tokens across three separate scheduler iterations. The assertions verify that the request completed with the right number of generated tokens, that `prefill_cursor` reached the full prompt length (confirming all three chunks were processed), and that the KV cache shape matches `prompt_length + generated_tokens - 1` - meaning the chunks were stitched together correctly without any gaps or double-counted positions.
 
 ```python
 
@@ -398,7 +398,7 @@ assert req.status == "done"
 assert req.prefill_cursor == len(req.prompt_tokens), "Prefill cursor should equal prompt length"
 assert req.num_generated == req.max_new_tokens
 
-print("\n✓ Test 2 passed — 20-token prompt was chunked (8+8+4) and completed correctly!")
+print("\n✓ Test 2 passed - 20-token prompt was chunked (8+8+4) and completed correctly!")
 
 ```
 
@@ -420,12 +420,12 @@ Generated 5 tokens
 Prefill cursor: 20 / 20
 Output: KING RICHARD THE THI
 
-✓ Test 2 passed — 20-token prompt was chunked (8+8+4) and completed correctly!
+✓ Test 2 passed - 20-token prompt was chunked (8+8+4) and completed correctly!
 ```
 
-The key number is `Prefill cursor: 20 / 20` — the cursor consumed all 20 prompt tokens across three separate forward passes and the KV cache ended up at the right shape. This is the first proof that the chunking math actually works: the `chunk_start` and `chunk_size` slicing correctly picks up where the previous chunk left off, the positional embeddings via `torch.arange(chunk_start, chunk_start + chunk_size)` give each token its correct absolute position, and the KV cache accumulates entries from each chunk without gaps or overlaps. If any chunk boundary was off by one, the cache shape assertion would fail.
+The key number is `Prefill cursor: 20 / 20` - the cursor consumed all 20 prompt tokens across three separate forward passes and the KV cache ended up at the right shape. This is the first proof that the chunking math actually works: the `chunk_start` and `chunk_size` slicing correctly picks up where the previous chunk left off, the positional embeddings via `torch.arange(chunk_start, chunk_start + chunk_size)` give each token its correct absolute position, and the KV cache accumulates entries from each chunk without gaps or overlaps. If any chunk boundary was off by one, the cache shape assertion would fail.
 
-**Test 3: decode latency during chunked prefill.** This test checks the whole point of chunked prefill: that decode requests don't stall while a long prompt is being prefilled. Request 0 has a short 5-token prompt and starts decoding immediately at step 0. Request 1 arrives at step 1 with a 20-token prompt that needs multiple prefill chunks at a budget of 8. If the scheduler is working correctly, request 0 should continue getting a decode forward pass every single step — even while request 1's prefill is still in progress. Both requests completing with the correct token counts confirms that the prefill chunks didn't block decode.
+**Test 3: decode latency during chunked prefill.** This test checks the whole point of chunked prefill: that decode requests don't stall while a long prompt is being prefilled. Request 0 has a short 5-token prompt and starts decoding immediately at step 0. Request 1 arrives at step 1 with a 20-token prompt that needs multiple prefill chunks at a budget of 8. If the scheduler is working correctly, request 0 should continue getting a decode forward pass every single step - even while request 1's prefill is still in progress. Both requests completing with the correct token counts confirms that the prefill chunks didn't block decode.
 
 ```python
 
@@ -480,7 +480,7 @@ for req in completed:
     expected_T = len(req.prompt_tokens) + req.num_generated - 1
     assert k.shape[1] == expected_T, f"Req {req.id}: cache T={k.shape[1]}, expected {expected_T}"
 
-print("\n✓ Test 3 passed — decode requests got service every step during chunked prefill!")
+print("\n✓ Test 3 passed - decode requests got service every step during chunked prefill!")
 ```
 
 ```text
@@ -498,12 +498,12 @@ Total tokens generated: 20
   Request 0: 15 tokens, status=done
   Request 1: 5 tokens, status=done
 
-✓ Test 3 passed — decode requests got service every step during chunked prefill!
+✓ Test 3 passed - decode requests got service every step during chunked prefill!
 ```
 
-Look at the completion steps: request 1 (the long prompt, 5 tokens to generate) finishes at step 6, while request 0 (the short prompt, 15 tokens to generate) finishes at step 13. Without chunked prefill, request 0 would have had to wait while request 1's entire 20-token prompt was prefilled in one shot — stalling its decode for several steps. Here, request 0 kept generating the whole time. The 0.14s wall time for 20 total tokens also confirms there's no obvious latency spike. In a production system, this is the difference between a user seeing the first few words of a response immediately versus staring at a blank screen while someone else's long prompt hogs the GPU.
+Look at the completion steps: request 1 (the long prompt, 5 tokens to generate) finishes at step 6, while request 0 (the short prompt, 15 tokens to generate) finishes at step 13. Without chunked prefill, request 0 would have had to wait while request 1's entire 20-token prompt was prefilled in one shot - stalling its decode for several steps. Here, request 0 kept generating the whole time. The 0.14s wall time for 20 total tokens also confirms there's no obvious latency spike. In a production system, this is the difference between a user seeing the first few words of a response immediately versus staring at a blank screen while someone else's long prompt hogs the GPU.
 
-**Test 4: mixed arrivals.** This is the stress test. Four requests arrive at different times (steps 0, 2, 5, and 8) with varying prompt lengths — some short enough to prefill in one shot, others long enough to require multiple chunks. The token budget is 10, meaning the scheduler has to juggle partial prefills alongside active decode requests at every step. The assertions verify that all 4 requests completed with the correct number of generated tokens, that every `prefill_cursor` reached the full prompt length (no chunks were lost), and that all KV cache shapes are consistent. If any of these fail, the scheduler is either dropping chunks, miscounting positions, or corrupting caches when multiple requests overlap.
+**Test 4: mixed arrivals.** This is the stress test. Four requests arrive at different times (steps 0, 2, 5, and 8) with varying prompt lengths - some short enough to prefill in one shot, others long enough to require multiple chunks. The token budget is 10, meaning the scheduler has to juggle partial prefills alongside active decode requests at every step. The assertions verify that all 4 requests completed with the correct number of generated tokens, that every `prefill_cursor` reached the full prompt length (no chunks were lost), and that all KV cache shapes are consistent. If any of these fail, the scheduler is either dropping chunks, miscounting positions, or corrupting caches when multiple requests overlap.
 
 ```python
 
@@ -517,11 +517,11 @@ print("Test 4: Mixed arrivals with varying prompt lengths")
 print("=" * 60)
 
 request_queue = [
-    # Short prompt — fits in one chunk (5 tokens < budget of 10)
+    # Short prompt - fits in one chunk (5 tokens < budget of 10)
     (0, Request(id=0, prompt_tokens=encode("Hello"),                    max_new_tokens=10)),
-    # Medium prompt — needs 2 chunks (16 tokens, budget=10 minus 1 decode = 9 per step)
+    # Medium prompt - needs 2 chunks (16 tokens, budget=10 minus 1 decode = 9 per step)
     (2, Request(id=1, prompt_tokens=encode("O Romeo, O Romeo!"),         max_new_tokens=8)),
-    # Long prompt — needs 3+ chunks (25 tokens)
+    # Long prompt - needs 3+ chunks (25 tokens)
     (5, Request(id=2, prompt_tokens=encode("Now is the winter of our d"), max_new_tokens=6)),
     # Another short one arriving late
     (8, Request(id=3, prompt_tokens=encode("Why?"),                     max_new_tokens=12)),
@@ -529,7 +529,7 @@ request_queue = [
 
 print("Queue:")
 for arrival, req in request_queue:
-    print(f"  step {arrival}: Request {req.id} — {len(req.prompt_tokens)} prompt tokens, "
+    print(f"  step {arrival}: Request {req.id} - {len(req.prompt_tokens)} prompt tokens, "
           f"wants {req.max_new_tokens} new tokens")
 print(f"Token budget: 10")
 print()
@@ -564,7 +564,7 @@ for req in completed:
     assert k.shape[1] == expected_T, (
         f"Req {req.id}: cache T={k.shape[1]}, expected {expected_T}")
 
-print("\n✓ Test 4 passed — all mixed-arrival requests completed with correct cache shapes!")
+print("\n✓ Test 4 passed - all mixed-arrival requests completed with correct cache shapes!")
 ```
 
 The result is 
@@ -574,10 +574,10 @@ The result is
 Test 4: Mixed arrivals with varying prompt lengths
 ============================================================
 Queue:
-  step 0: Request 0 — 5 prompt tokens, wants 10 new tokens
-  step 2: Request 1 — 17 prompt tokens, wants 8 new tokens
-  step 5: Request 2 — 26 prompt tokens, wants 6 new tokens
-  step 8: Request 3 — 4 prompt tokens, wants 12 new tokens
+  step 0: Request 0 - 5 prompt tokens, wants 10 new tokens
+  step 2: Request 1 - 17 prompt tokens, wants 8 new tokens
+  step 5: Request 2 - 26 prompt tokens, wants 6 new tokens
+  step 8: Request 3 - 4 prompt tokens, wants 12 new tokens
 Token budget: 10
 
   [step 8] Completed request 0 (10 tokens)
@@ -617,20 +617,20 @@ Why?
 CAMILLO:
 Y
 
-✓ Test 4 passed — all mixed-arrival requests completed with correct cache shapes!
+✓ Test 4 passed - all mixed-arrival requests completed with correct cache shapes!
 ```
 
-Four requests, four different arrival times, four different prompt lengths — all completed with correct token counts, fully-consumed prefill cursors, and consistent cache shapes. The completion order tells the story: requests 0 and 1 finish together at step 8, request 2 (26-token prompt) finishes at step 10, and request 3 (arrived late) finishes last at step 17. The scheduler correctly interleaved chunked prefills with ongoing decode work across all of them. This is the closest our toy implementation gets to simulating real traffic.
+Four requests, four different arrival times, four different prompt lengths - all completed with correct token counts, fully-consumed prefill cursors, and consistent cache shapes. The completion order tells the story: requests 0 and 1 finish together at step 8, request 2 (26-token prompt) finishes at step 10, and request 3 (arrived late) finishes last at step 17. The scheduler correctly interleaved chunked prefills with ongoing decode work across all of them. This is the closest our toy implementation gets to simulating real traffic.
 
 ## What we left on the table
 
-There's an important simplification worth flagging. A real chunked prefill system (like vLLM's) mixes the prefill chunk and decode tokens into a **single forward pass** — one batch where some rows are prefilling and others are decoding. This requires a more complex attention mask: decode rows attend over their full KV cache plus the current token, while prefill rows attend only over the tokens in their current chunk (with causal masking within the chunk).
+There's an important simplification worth flagging. A real chunked prefill system (like vLLM's) mixes the prefill chunk and decode tokens into a **single forward pass** - one batch where some rows are prefilling and others are decoding. This requires a more complex attention mask: decode rows attend over their full KV cache plus the current token, while prefill rows attend only over the tokens in their current chunk (with causal masking within the chunk).
 
-I kept the simpler approach: prefill and decode run as separate forward passes each iteration. This means two model calls per step instead of one, which wastes some GPU efficiency. But the *scheduling* is correct — decode never stalls, the chunks are the right size, and the KV caches accumulate properly. Fusing the two passes into one is a pure optimization that doesn't change the scheduling logic.
+I kept the simpler approach: prefill and decode run as separate forward passes each iteration. This means two model calls per step instead of one, which wastes some GPU efficiency. But the *scheduling* is correct - decode never stalls, the chunks are the right size, and the KV caches accumulate properly. Fusing the two passes into one is a pure optimization that doesn't change the scheduling logic.
 
 ## A bug worth mentioning
 
-During development, test 2 crashed with `IndexError: list index out of range` when trying to access `completed[0]`. The completed list was empty — the function returned before the request finished generating.
+During development, test 2 crashed with `IndexError: list index out of range` when trying to access `completed[0]`. The completed list was empty - the function returned before the request finished generating.
 
 ```text
 
@@ -646,7 +646,7 @@ IndexError                                Traceback (most recent call last)
 IndexError: list index out of range
 ```
 
-The bug was in the `while` loop condition: `while active_requests or queue_idx < len(request_queue)`. When a request was mid-prefill and the queue was empty, neither condition was true — `active_requests` was empty (the request was in `prefilling_requests`, not `active_requests`) and `queue_idx` had already reached the end. The loop exited with the request half-processed. The fix was adding `or prefilling_requests` to the loop condition.
+The bug was in the `while` loop condition: `while active_requests or queue_idx < len(request_queue)`. When a request was mid-prefill and the queue was empty, neither condition was true - `active_requests` was empty (the request was in `prefilling_requests`, not `active_requests`) and `queue_idx` had already reached the end. The loop exited with the request half-processed. The fix was adding `or prefilling_requests` to the loop condition.
 
 You can find the full source code on [GitHub](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_chunked-prefill.ipynb).
 

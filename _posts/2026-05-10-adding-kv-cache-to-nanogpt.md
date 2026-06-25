@@ -4,19 +4,19 @@ title: "Adding KV Cache to NanoGPT"
 date: 2026-05-10
 ---
 
-NanoGPT is Andrej Karpathy's [from-scratch GPT](https://github.com/karpathy/nanoGPT) trained on Shakespeare — no abstractions, no optimizations, just the bare-minimum transformer you need to generate text. I wanted to understand how inference servers actually work, so I started at the bottom: adding a KV cache to this toy model by hand.
+NanoGPT is Andrej Karpathy's [from-scratch GPT](https://github.com/karpathy/nanoGPT) trained on Shakespeare - no abstractions, no optimizations, just the bare-minimum transformer you need to generate text. I wanted to understand how inference servers actually work, so I started at the bottom: adding a KV cache to this toy model by hand.
 
-The core idea is simple. In a standard transformer, every time you generate a new token, you recompute the key and value projections for *every* token in the sequence — including all the ones you already processed. That's quadratic in the sequence length. A KV cache stores the key and value vectors from previous positions so you never recompute them. The query for the new token attends over the cached keys and values, and you only compute K and V for the single new token. This brings the per-step cost from O(n) to O(1), and the total generation cost from O(n²) to O(n).
+The core idea is simple. In a standard transformer, every time you generate a new token, you recompute the key and value projections for *every* token in the sequence - including all the ones you already processed. That's quadratic in the sequence length. A KV cache stores the key and value vectors from previous positions so you never recompute them. The query for the new token attends over the cached keys and values, and you only compute K and V for the single new token. This brings the per-step cost from O(n) to O(1), and the total generation cost from O(n²) to O(n).
 
 ## Where the cache lives
 
-The natural place for the cache is inside the `Head` class — the module that handles one head of self-attention. Each head independently projects the input into query, key, and value vectors, so each head needs its own cache.
+The natural place for the cache is inside the `Head` class - the module that handles one head of self-attention. Each head independently projects the input into query, key, and value vectors, so each head needs its own cache.
 
 I had to think through several things:
 
-- **Data structure.** My first instinct was a hashmap keyed by token ID, but that's wrong — the cache isn't about *which* token, it's about *which position*. It's just a tensor of shape `(B, T, hs)` that grows by one row each decode step as we concatenate new key/value vectors along the sequence dimension.
-- **Don't interleave K and V.** You might think about storing keys and values in one tensor, but the whole point of caching is fast access. During attention, you need `Q @ K^T` and then `weights @ V` — interleaving would force you to extract K and V back out every step, defeating the purpose.
-- **Masking goes away.** In the original NanoGPT, the causal mask prevents the model from attending to future tokens during training. But during cached inference, we feed one token at a time. There are no future tokens to mask — the cache only contains past positions. So the mask can be removed entirely for the inference path.
+- **Data structure.** My first instinct was a hashmap keyed by token ID, but that's wrong - the cache isn't about *which* token, it's about *which position*. It's just a tensor of shape `(B, T, hs)` that grows by one row each decode step as we concatenate new key/value vectors along the sequence dimension.
+- **Don't interleave K and V.** You might think about storing keys and values in one tensor, but the whole point of caching is fast access. During attention, you need `Q @ K^T` and then `weights @ V` - interleaving would force you to extract K and V back out every step, defeating the purpose.
+- **Masking goes away.** In the original NanoGPT, the causal mask prevents the model from attending to future tokens during training. But during cached inference, we feed one token at a time. There are no future tokens to mask - the cache only contains past positions. So the mask can be removed entirely for the inference path.
 - **Training vs. inference.** PyTorch's `nn.Module` has a `self.training` flag that flips when you call `model.eval()`. We use this to guard the cache logic: during training, the original full-sequence attention runs unchanged; during inference, we accumulate into the cache and attend over it.
 
 The final code:
@@ -73,7 +73,7 @@ class Head(nn.Module):
 
 ```
 
-The inference branch is the interesting one. When a new token arrives, we project it to get `k` and `v` of shape `(B, 1, hs)` and concatenate them onto the existing cache. Now the cache has shape `(B, T_so_far, hs)`. The query — also `(B, 1, hs)` — attends over the full cache: `Q @ K^T` gives `(B, 1, T_so_far)` attention weights, and the weighted sum over V gives `(B, 1, hs)`. One row in, one row out. The training branch is unchanged. 
+The inference branch is the interesting one. When a new token arrives, we project it to get `k` and `v` of shape `(B, 1, hs)` and concatenate them onto the existing cache. Now the cache has shape `(B, T_so_far, hs)`. The query - also `(B, 1, hs)` - attends over the full cache: `Q @ K^T` gives `(B, 1, T_so_far)` attention weights, and the weighted sum over V gives `(B, 1, hs)`. One row in, one row out. The training branch is unchanged. 
 
 The `if self.key_cache is not None` check handles the first step: when the cache is empty (the very first forward pass), we initialize it directly instead of trying to concatenate onto `None`.
 
@@ -140,7 +140,7 @@ Now, we run `model(idx)` once since that is how we prefill the KV cache before t
 
 ## Positional encoding
 
-A transformer has no inherent sense of order — "A cat is big" and "A big is cat" would produce the same embeddings without position information. NanoGPT uses a learned position embedding table: during the forward pass, the position index looks up a vector from the table, and that vector gets added to the token embedding.
+A transformer has no inherent sense of order - "A cat is big" and "A big is cat" would produce the same embeddings without position information. NanoGPT uses a learned position embedding table: during the forward pass, the position index looks up a vector from the table, and that vector gets added to the token embedding.
 
 During full-sequence training, this is straightforward: if the sequence has 17 tokens, you look up positions 0 through 16. But with the KV cache, we're feeding one token at a time. If we don't pass the correct position, the model treats every token as position 0.
 
@@ -210,7 +210,7 @@ model.forward(idx[:, -1:], pos=9)  # idx: (1, 1)
     out = wei @ value_cache: (1,1,10) @ (1,10,16) → (1, 1, 16)
 ```
 
-During prefill, the query has 9 positions and attends over 9 cached positions — `(1, 9, 9)` attention weights. During decode, the query has 1 position and attends over 10 cached positions — `(1, 1, 10)`. The cache grew by one row, and the computation stayed O(1) per token instead of recomputing everything.
+During prefill, the query has 9 positions and attends over 9 cached positions - `(1, 9, 9)` attention weights. During decode, the query has 1 position and attends over 10 cached positions - `(1, 1, 10)`. The cache grew by one row, and the computation stayed O(1) per token instead of recomputing everything.
 
 ## Benchmarks
 
@@ -297,7 +297,7 @@ With KV cache    : 1.172s  (170.7 tok/s)
 Speedup          : 1.11×
 ```
 
-Only 1.11×. That's real but underwhelming. The reason: this model is *tiny* — 0.2M parameters, 4 layers, 4 heads. At this scale, the Python interpreter overhead (function calls, tensor creation, `torch.cat`) dominates the actual matrix multiplications. The KV cache saves recomputation that barely costs anything in the first place. On larger models with longer sequences, the quadratic savings become dramatic — this is why production systems treat the KV cache as essential infrastructure, not an optimization.
+Only 1.11×. That's real but underwhelming. The reason: this model is *tiny* - 0.2M parameters, 4 layers, 4 heads. At this scale, the Python interpreter overhead (function calls, tensor creation, `torch.cat`) dominates the actual matrix multiplications. The KV cache saves recomputation that barely costs anything in the first place. On larger models with longer sequences, the quadratic savings become dramatic - this is why production systems treat the KV cache as essential infrastructure, not an optimization.
 
 ## Output
 
@@ -327,9 +327,9 @@ Say, from care,
 
 **Estimate loss frequency.** I was running the loss estimation loop every 100 steps, which was destroying throughput on the free Colab GPU. Changing it to every 500 steps made training workable.
 
-**`torch.compile` and mutable state.** I tried `torch.compile(model)` to speed things up, but it doesn't play well with the KV cache. Torch compile traces the computation graph and replays it — but the cache is mutable state that changes shape every step. The traced graph expects fixed shapes and corrupts the output. Production systems solve this with pre-allocated caches and padding, but for a toy implementation it's easier to just skip `compile`.
+**`torch.compile` and mutable state.** I tried `torch.compile(model)` to speed things up, but it doesn't play well with the KV cache. Torch compile traces the computation graph and replays it - but the cache is mutable state that changes shape every step. The traced graph expects fixed shapes and corrupts the output. Production systems solve this with pre-allocated caches and padding, but for a toy implementation it's easier to just skip `compile`.
 
-**Validation loss not decreasing.** At one point my validation loss was flat. The cause was surprising: I was calling `model.train()` and `model.eval()` in the estimation loop, but since I wasn't using dropout, there was no behavioral difference between the two modes — except that `model.eval()` was activating the KV cache path, which was corrupting the loss computation. Removing those calls from the estimation function fixed it.
+**Validation loss not decreasing.** At one point my validation loss was flat. The cause was surprising: I was calling `model.train()` and `model.eval()` in the estimation loop, but since I wasn't using dropout, there was no behavioral difference between the two modes - except that `model.eval()` was activating the KV cache path, which was corrupting the loss computation. Removing those calls from the estimation function fixed it.
 
 **CUDA device-side assert.** After training, generation crashed with `CUDA error: device-side assert triggered`. The position embedding table had only 32 entries (`block_size = 32`), so generating 500 tokens tried to look up position 500 in a table that only goes to 31. The fix: cap `max_new_tokens` so that `prompt_length + max_new_tokens ≤ block_size`.
 

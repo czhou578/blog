@@ -6,15 +6,15 @@ date: 2026-06-05
 
 The scariest bugs in inference optimization are the ones that don't crash.
 
-A wrong positional embedding doesn't throw an error — the model just produces slightly worse text. A KV cache that silently drops one entry doesn't segfault — the attention scores shift by a fraction and the output drifts in a way that looks like the model is being "creative." A broken attention mask in a fused batch doesn't fail loudly — it lets one request peek at another's KV entries, and the outputs look plausible but are subtly contaminated.
+A wrong positional embedding doesn't throw an error - the model just produces slightly worse text. A KV cache that silently drops one entry doesn't segfault - the attention scores shift by a fraction and the output drifts in a way that looks like the model is being "creative." A broken attention mask in a fused batch doesn't fail loudly - it lets one request peek at another's KV entries, and the outputs look plausible but are subtly contaminated.
 
 Over the course of this blog series, I've implemented KV caching, continuous batching, paged attention, prefix caching, chunked prefill, speculative decoding, and fused interleaved inference. Each one assumed it didn't break the model. Each one had plenty of opportunities to introduce exactly the kind of silent corruption described above.
 
 This post describes 10 correctness equivalence tests that check each optimization against the simplest possible baseline. The structure is the same every time: run the optimized path, run the naive path, compare outputs. If they diverge, the optimization has a bug.
 
-The key testing technique: **most of these tests use greedy (argmax) decoding**. Greedy decoding eliminates randomness entirely. There is exactly one correct next token at every step. If the optimized path produces a different token than the baseline path, that is not a flaky test or a sampling artifact — it is a real bug in the code. The two tests that do involve sampling use statistical methods instead.
+The key testing technique: **most of these tests use greedy (argmax) decoding**. Greedy decoding eliminates randomness entirely. There is exactly one correct next token at every step. If the optimized path produces a different token than the baseline path, that is not a flaky test or a sampling artifact - it is a real bug in the code. The two tests that do involve sampling use statistical methods instead.
 
-All 10 tests were run against the [trigram speculative decoding](/blog/2026/06/05/speculative-trigram) NanoGPT file, which exercises the full stack — KV caching, batching, paged attention, prefix caching, speculative decoding with both bigram and trigram draft models, chunked prefill, and fused interleaved inference. Every test passed.
+All 10 tests were run against the [trigram speculative decoding](/blog/2026/06/05/speculative-trigram) NanoGPT file, which exercises the full stack - KV caching, batching, paged attention, prefix caching, speculative decoding with both bigram and trigram draft models, chunked prefill, and fused interleaved inference. Every test passed.
 
 ## 1. Recompute vs. KV Cache
 
@@ -43,7 +43,7 @@ for i in range(len(cached_logits)):
         all_close = False
 ```
 
-The `atol=1e-5` tolerance is necessary. Float32 arithmetic is not associative — the order of additions in attention can produce slightly different results between the cached and recomputed paths. But `1e-5` is tight enough that any real bug (wrong position index, missing cache entry, transposed dimensions) will blow past it.
+The `atol=1e-5` tolerance is necessary. Float32 arithmetic is not associative - the order of additions in attention can produce slightly different results between the cached and recomputed paths. But `1e-5` is tight enough that any real bug (wrong position index, missing cache entry, transposed dimensions) will blow past it.
 
 **What bugs this catches:** wrong positional embeddings in the cached path, off-by-one errors in cache length tracking, incorrect KV concatenation order.
 
@@ -51,7 +51,7 @@ The `atol=1e-5` tolerance is necessary. Float32 arithmetic is not associative �
 
 **What it tests:** decoding each request alone produces the same tokens as decoding all requests together in a [continuous batch](/blog/2026/05/11/adding-continuous-batching).
 
-The concern here is subtle. When you stack multiple requests into one forward pass using `_stack_kvs`, each request's attention computation must be completely independent. A bug in the stacking — say, a request accidentally attending to another request's KV entries — would silently corrupt outputs. You wouldn't see an error. The model would just produce slightly wrong tokens.
+The concern here is subtle. When you stack multiple requests into one forward pass using `_stack_kvs`, each request's attention computation must be completely independent. A bug in the stacking - say, a request accidentally attending to another request's KV entries - would silently corrupt outputs. You wouldn't see an error. The model would just produce slightly wrong tokens.
 
 ```text
 Unbatched:
@@ -73,9 +73,9 @@ Greedy decoding makes this a hard pass/fail. If request B produces a different t
 
 **What it tests:** writing KV entries into a [paged block pool](/blog/2026/05/24/paged-att) and gathering them back produces the same decode output as a normal contiguous cache.
 
-Paged attention adds a layer of indirection. Instead of one contiguous tensor per request, KV entries live in fixed-size blocks scattered across a shared pool. The concern is that the scatter-gather logic — `_write_kvs_to_pool` and `_gather_paged_kv` — might introduce off-by-one errors at block boundaries.
+Paged attention adds a layer of indirection. Instead of one contiguous tensor per request, KV entries live in fixed-size blocks scattered across a shared pool. The concern is that the scatter-gather logic - `_write_kvs_to_pool` and `_gather_paged_kv` - might introduce off-by-one errors at block boundaries.
 
-The test is deliberate about this. It runs multiple prompt lengths — 3, 4, 5, 7, 8 — specifically chosen to land on and off block boundaries (with `page_block_size=4`):
+The test is deliberate about this. It runs multiple prompt lengths - 3, 4, 5, 7, 8 - specifically chosen to land on and off block boundaries (with `page_block_size=4`):
 
 ```python
 prompt_lens = [pl for pl in [3, 4, 5, 7, 8]
@@ -124,7 +124,7 @@ If draft_token != target_argmax → reject → resample from max(0, target - dra
                                          → argmax of residual = target_argmax
 ```
 
-So greedy speculative decoding is a no-op. The draft model's guesses don't matter — every accepted token is the target's argmax, and every resampled token after rejection is also the target's argmax. If the implementation produces different tokens, the accept/reject logic has a bug.
+So greedy speculative decoding is a no-op. The draft model's guesses don't matter - every accepted token is the target's argmax, and every resampled token after rejection is also the target's argmax. If the implementation produces different tokens, the accept/reject logic has a bug.
 
 The test checks both the bigram and trigram draft models:
 
@@ -138,7 +138,7 @@ if auto_tokens[i] != tri_tokens:
     all_match = False
 ```
 
-The comparison is exact — not `allclose`, not within tolerance. Identical token sequences or failure.
+The comparison is exact - not `allclose`, not within tolerance. Identical token sequences or failure.
 
 **What bugs this catches:** incorrect accept/reject probability computation, wrong KV cache trimming after rejection, off-by-one in the verify input sequence, broken rolling context in the trigram draft model.
 
@@ -165,7 +165,7 @@ def _sample_spec(seed, draft_model, is_trigram):
             output_token = torch.multinomial(adjusted / adjusted.sum(), 1).item()
 ```
 
-Only one token is generated per trial. This is critical — if we generated multiple tokens, the RNG consumption would differ between the two paths (the spec-decode path sometimes draws an extra random number for rejection), causing the sequences to diverge for reasons unrelated to correctness.
+Only one token is generated per trial. This is critical - if we generated multiple tokens, the RNG consumption would differ between the two paths (the spec-decode path sometimes draws an extra random number for rejection), causing the sequences to diverge for reasons unrelated to correctness.
 
 The comparison uses a chi-squared test with a significance threshold of `p > 0.01`. Because chi-squared tests have an inherent ~1% false-positive rate, the test runs three independent seeds and requires at least two to pass:
 
@@ -205,13 +205,13 @@ actual_cache_len = trimmed[0][0][0].shape[1]
 shape_ok = actual_cache_len == expected_cache_len
 ```
 
-A shape mismatch means `_trim_kv_cache` is keeping the wrong number of entries. A logit mismatch means the kept entries are correct in number but wrong in content — perhaps the trimming sliced along the wrong dimension, or the "keep" count was off by one.
+A shape mismatch means `_trim_kv_cache` is keeping the wrong number of entries. A logit mismatch means the kept entries are correct in number but wrong in content - perhaps the trimming sliced along the wrong dimension, or the "keep" count was off by one.
 
 **What bugs this catches:** off-by-one in the trim boundary, wrong slice dimension, incorrect `keep_new_tokens` accounting.
 
 ## 8. Draft Model Distribution Sanity
 
-**What it tests:** the bigram and trigram draft models produce valid probability distributions — normalized, non-zero, and peaked on the right tokens.
+**What it tests:** the bigram and trigram draft models produce valid probability distributions - normalized, non-zero, and peaked on the right tokens.
 
 This is the only test that doesn't need the target model at all. It constructs a tiny known corpus and checks that the draft model learns the obvious pattern:
 
@@ -241,7 +241,7 @@ A distribution that doesn't sum to 1.0 would silently break `torch.multinomial` 
 
 **What it tests:** prefilling a prompt in small chunks (accumulating the KV cache across multiple forward calls) produces the same logits as prefilling the entire prompt in one shot.
 
-[Chunked prefill](/blog/2026/05/13/adding-chunked-prefill) is a scheduling optimization — it breaks a long prompt into pieces so that active decode requests aren't starved. But the final logits must be identical regardless of how the prompt was split.
+[Chunked prefill](/blog/2026/05/13/adding-chunked-prefill) is a scheduling optimization - it breaks a long prompt into pieces so that active decode requests aren't starved. But the final logits must be identical regardless of how the prompt was split.
 
 ```python
 # Full prefill: one forward pass
@@ -279,7 +279,7 @@ The fused batch uses left-padding for the shorter decode row, an attention mask 
 ```python
 attn_mask = torch.zeros((2, 1, cache_len_a), dtype=torch.bool, device=device)
 attn_mask[0, :, :] = True   # A can see its entire cache
-# attn_mask[1] stays False — B has no real cached positions
+# attn_mask[1] stays False - B has no real cached positions
 
 input_mask = torch.zeros((2, t_max), dtype=torch.bool, device=device)
 input_mask[0, -1] = True            # only last position is real for decode

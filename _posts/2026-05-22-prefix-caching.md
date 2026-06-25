@@ -17,18 +17,18 @@ So far, we have a scheduling system in NanoGPT that can handle multiple requests
 
 **Prefix caching** stores completed KV blocks in a content-addressed cache. When Request B arrives and its prompt starts with the same tokens as Request A, the scheduler finds the cached KV blocks, skips the prefill for those tokens, and only computes the **suffix** (e.g. `"Goodbye"`). This directly reduces TTFT or time to first token.
 
-In production (vLLM's Automatic Prefix Caching), this cuts prefill compute by 50–90% for workloads with shared system prompts — which is the vast majority of API deployments.
+In production (vLLM's Automatic Prefix Caching), this cuts prefill compute by 50–90% for workloads with shared system prompts - which is the vast majority of API deployments.
 
-To put that in concrete numbers: imagine 1,000 API calls all starting with the same 512-token system prompt. Without prefix caching, you run 512 × 1,000 = **512,000 prefill tokens** through the transformer. With prefix caching, you run 512 once, cache the KV blocks, and the other 999 requests skip straight to their unique suffix — that's **511,488 fewer forward-pass tokens**, or a 99.9% reduction in redundant prefill compute.
+To put that in concrete numbers: imagine 1,000 API calls all starting with the same 512-token system prompt. Without prefix caching, you run 512 × 1,000 = **512,000 prefill tokens** through the transformer. With prefix caching, you run 512 once, cache the KV blocks, and the other 999 requests skip straight to their unique suffix - that's **511,488 fewer forward-pass tokens**, or a 99.9% reduction in redundant prefill compute.
 
 ## Why This Matters Even at 210K Params
 
-We won't see a meaningful wall-clock improvement on nanoGPT — the model is too small and the prompts too short for the cache lookup overhead to pay for itself. But the concepts are exactly what inference systems like vLLM implements:
+We won't see a meaningful wall-clock improvement on nanoGPT - the model is too small and the prompts too short for the cache lookup overhead to pay for itself. But the concepts are exactly what inference systems like vLLM implements:
 
-1. **Content-addressed hashing** — KV blocks are keyed by their token content, not by request ID or position.
-2. **Chained hashes** — each block's hash includes its parent's hash, so the entire prefix history is captured transitively.
-3. **LRU eviction** — when memory is full, the least-recently-used cached blocks are evicted to make room for new ones.
-4. **The scheduler integrates cache hits** — cached tokens are subtracted from the work to do, so a fully-cached prefix means near-zero prefill cost.
+1. **Content-addressed hashing** - KV blocks are keyed by their token content, not by request ID or position.
+2. **Chained hashes** - each block's hash includes its parent's hash, so the entire prefix history is captured transitively.
+3. **LRU eviction** - when memory is full, the least-recently-used cached blocks are evicted to make room for new ones.
+4. **The scheduler integrates cache hits** - cached tokens are subtracted from the work to do, so a fully-cached prefix means near-zero prefill cost.
 
 The goal is to learn the architecture, not hit a perf number.
 
@@ -45,7 +45,7 @@ In addition, memory management becomes easier, since we now have a natural unit 
 Finally, the semantics become very clear for the developer. If we see a block is in the cache, we can be certain that its hash is meaningful.
 
 Choose a block size
-(e.g. `BLOCK_SIZE = 4` — small enough to see the mechanics at nanoGPT scale). A prompt of
+(e.g. `BLOCK_SIZE = 4` - small enough to see the mechanics at nanoGPT scale). A prompt of
 12 tokens becomes 3 blocks:
 
 ```
@@ -80,14 +80,14 @@ graph LR
 
 Each block stores a fixed-size KV chunk: `(1, BLOCK_SIZE, head_size)` per (layer, head).
 Only **full** blocks (exactly `BLOCK_SIZE` tokens) are eligible for caching. The trailing
-partial block is never cached — it changes with every new decode token.
+partial block is never cached - it changes with every new decode token.
 
 **Question to ask yourself:** Why can't you cache partial blocks?
 
 <details>
 <summary>Answer</summary>
 
-A partial block is still being built — every new decode token extends it, which would change its content and invalidate any hash you computed. You'd insert a block into the cache, then immediately need to delete it and re-insert a different version on the very next step. Only full blocks are "sealed" — their content will never change, so their hash is stable and their KV tensors are final.
+A partial block is still being built - every new decode token extends it, which would change its content and invalidate any hash you computed. You'd insert a block into the cache, then immediately need to delete it and re-insert a different version on the very next step. Only full blocks are "sealed" - their content will never change, so their hash is stable and their KV tensors are final.
 
 </details>
 
@@ -193,7 +193,7 @@ graph TD
 </div>
 
 Block 1 (`["the", "mat", ".", "!"]`) has the **same token IDs** in both requests. But the
-KV tensors are numerically different — in Request A, every token in Block 1 attended to
+KV tensors are numerically different - in Request A, every token in Block 1 attended to
 `"The cat sat on"`, while in Request B it attended to `"The dog sat on"`. The K and V
 projections produce different values because the input `x` to the attention layer is different
 (it was contextualized by a different prefix).
@@ -222,14 +222,14 @@ def find_cached_prefix(block_cache, prompt_tokens, block_size):
     for start in range(0, len(prompt_tokens), block_size):
         end = start + block_size
         if end > len(prompt_tokens):
-            break  # partial block — not cacheable
+            break  # partial block - not cacheable
 
         chunk = prompt_tokens[start:end]
         block_hash = hash_block_tokens(parent_hash, chunk)
 
         cached = block_cache.lookup(block_hash)
         if cached is None:
-            break  # cache miss — everything from here on must be computed
+            break  # cache miss - everything from here on must be computed
 
         num_cached_tokens += block_size
         parent_hash = block_hash  # chain for the next block
@@ -237,13 +237,13 @@ def find_cached_prefix(block_cache, prompt_tokens, block_size):
     return num_cached_tokens
 ```
 
-1. Initialize — zero count + NONE_HASH sentinel, matching the insertion convention
-2. Loop in block strides — must go left-to-right (can't skip due to hash chaining)
-3. Skip partial blocks — incomplete blocks are never cached
-4. Compute chained hash — reproduces the same hash used during insertion
-5. Cache lookup — miss at block k means all subsequent blocks will also miss (chained hashes guarantee this)
-6. Accumulate and chain — count cached tokens, update parent_hash for next iteration
-7. Return — tells the scheduler where to set prefill_cursor so prefill skips cached tokens
+1. Initialize - zero count + NONE_HASH sentinel, matching the insertion convention
+2. Loop in block strides - must go left-to-right (can't skip due to hash chaining)
+3. Skip partial blocks - incomplete blocks are never cached
+4. Compute chained hash - reproduces the same hash used during insertion
+5. Cache lookup - miss at block k means all subsequent blocks will also miss (chained hashes guarantee this)
+6. Accumulate and chain - count cached tokens, update parent_hash for next iteration
+7. Return - tells the scheduler where to set prefill_cursor so prefill skips cached tokens
 
 ## Load Cached Blocks Into Request
 
@@ -290,19 +290,19 @@ def load_cached_blocks(request, block_cache, prompt_tokens, block_size):
 
 ```
 
-**Initialize.** Same as `find_cached_prefix` — we start with `NONE_HASH` and zero cached tokens. This function does the same walk, but instead of just *counting* hits, it *copies* the KV data into the request.
+**Initialize.** Same as `find_cached_prefix` - we start with `NONE_HASH` and zero cached tokens. This function does the same walk, but instead of just *counting* hits, it *copies* the KV data into the request.
 
-**Loop in block strides.** Identical traversal to `find_cached_prefix` — left-to-right, skipping partial trailing blocks. The two functions walk in lockstep by design so their hash chains always agree.
+**Loop in block strides.** Identical traversal to `find_cached_prefix` - left-to-right, skipping partial trailing blocks. The two functions walk in lockstep by design so their hash chains always agree.
 
-**Hash and lookup.** We compute the chained hash for the current chunk and look it up in the global cache. On a miss, we break — everything from here on must be computed from scratch during prefill.
+**Hash and lookup.** We compute the chained hash for the current chunk and look it up in the global cache. On a miss, we break - everything from here on must be computed from scratch during prefill.
 
-**Copy KV data into the request.** This is the core of the function. For each `(layer, head)` pair in the cached block's `kv_data`, we either concatenate the cached K and V tensors onto the request's existing KV cache (if prior blocks have already been loaded), or initialize the cache entry with a fresh copy. The `.clone()` calls are critical — without them, multiple requests would share the same tensor objects, and any in-place modification (e.g., during decode) would corrupt the global cache.
+**Copy KV data into the request.** This is the core of the function. For each `(layer, head)` pair in the cached block's `kv_data`, we either concatenate the cached K and V tensors onto the request's existing KV cache (if prior blocks have already been loaded), or initialize the cache entry with a fresh copy. The `.clone()` calls are critical - without them, multiple requests would share the same tensor objects, and any in-place modification (e.g., during decode) would corrupt the global cache.
 
 **Accumulate and chain.** We add `block_size` to the cached count and update `parent_hash` for the next iteration, maintaining the hash chain.
 
-**Set prefill cursor.** After all cached blocks are loaded, we advance the request's `prefill_cursor` past the cached tokens. When the scheduler later runs prefill for this request, it starts from `prefill_cursor` instead of position 0 — skipping all the tokens whose KV values were just loaded from the cache.
+**Set prefill cursor.** After all cached blocks are loaded, we advance the request's `prefill_cursor` past the cached tokens. When the scheduler later runs prefill for this request, it starts from `prefill_cursor` instead of position 0 - skipping all the tokens whose KV values were just loaded from the cache.
 
-**Return.** The count of cached tokens is returned so the caller knows how much work was saved. If `num_cached == len(prompt_tokens)` (fully cached), prefill is essentially free — only the first decode token needs to be computed.
+**Return.** The count of cached tokens is returned so the caller knows how much work was saved. If `num_cached == len(prompt_tokens)` (fully cached), prefill is essentially free - only the first decode token needs to be computed.
 
 ## Caching Newly Computed Blocks
 
@@ -344,15 +344,15 @@ def commit_completed_blocks(request, block_cache, block_size):
     request._committed_blocks = num_full_blocks
 ```
 
-**Count full blocks.** We use `request.prefill_cursor // block_size` to figure out how many complete blocks have been processed so far. Only full blocks are eligible for caching — the partial tail is still being built and will change with the next prefill chunk.
+**Count full blocks.** We use `request.prefill_cursor // block_size` to figure out how many complete blocks have been processed so far. Only full blocks are eligible for caching - the partial tail is still being built and will change with the next prefill chunk.
 
 **Lazy-init the commit tracker.** The `_committed_blocks` attribute tracks how many blocks have already been inserted into the cache. Without this, we'd re-insert the same blocks on every prefill step. On the first call, it defaults to 0.
 
-**Walk and hash.** Same left-to-right traversal as the other two functions — compute each block's chained hash from `parent_hash` and the chunk's token IDs. We always walk from block 0 (even for already-committed blocks) because we need to rebuild the hash chain so that later blocks get the correct `parent_hash`.
+**Walk and hash.** Same left-to-right traversal as the other two functions - compute each block's chained hash from `parent_hash` and the chunk's token IDs. We always walk from block 0 (even for already-committed blocks) because we need to rebuild the hash chain so that later blocks get the correct `parent_hash`.
 
-**Skip already-committed blocks.** The `if block_idx >= request._committed_blocks` guard ensures we only insert *newly* completed blocks. Blocks committed in previous prefill steps are skipped — we still compute their hashes (to maintain the chain), but we don't touch the cache.
+**Skip already-committed blocks.** The `if block_idx >= request._committed_blocks` guard ensures we only insert *newly* completed blocks. Blocks committed in previous prefill steps are skipped - we still compute their hashes (to maintain the chain), but we don't touch the cache.
 
-**Extract and clone the KV slice.** For each new block, we slice the request's KV cache at `[start:end]` for every `(layer, head)` pair and `.clone()` the tensors. The clone is critical — the request's KV cache continues to grow during decode, and without cloning, the cached block's tensors would be views into the request's memory that get silently corrupted as the request progresses.
+**Extract and clone the KV slice.** For each new block, we slice the request's KV cache at `[start:end]` for every `(layer, head)` pair and `.clone()` the tensors. The clone is critical - the request's KV cache continues to grow during decode, and without cloning, the cached block's tensors would be views into the request's memory that get silently corrupted as the request progresses.
 
 **Insert into the global cache.** The block hash, token IDs (as a tuple for hashability), and cloned KV data are inserted into the `BlockCache`. If the cache is full, this triggers LRU eviction of the oldest block.
 
@@ -439,7 +439,7 @@ def prefill_with_cache(model, request, block_cache, block_size):
             block_cache.insert(block_hash, tuple(chunk), chunk_kv)
 
     else:
-        # All cached — no computation needed
+        # All cached - no computation needed
         kv_cache = {}
         num_computed = 0
 
@@ -470,11 +470,11 @@ def prefill_with_cache(model, request, block_cache, block_size):
 
 **Find cached prefix.** First, we call `find_cached_prefix` to walk the prompt left-to-right and count how many leading tokens already have KV blocks in the global cache. This returns a token count (always a multiple of `block_size`).
 
-**Compute the suffix.** If any tokens remain after the cached prefix, we slice the prompt from `num_cached` onward and run those tokens through the model to get fresh KV tensors. If the entire prompt was cached (`num_cached == num_prompt`), we skip the forward pass entirely — prefill cost is zero.
+**Compute the suffix.** If any tokens remain after the cached prefix, we slice the prompt from `num_cached` onward and run those tokens through the model to get fresh KV tensors. If the entire prompt was cached (`num_cached == num_prompt`), we skip the forward pass entirely - prefill cost is zero.
 
 **Cache newly computed blocks.** For each full block in the newly computed suffix, we extract the corresponding KV slice, compute its chained hash (using the last cached block's hash as the parent), and insert it into the `BlockCache`. This ensures that future requests with overlapping prefixes can reuse this work.
 
-**Assemble the full KV cache.** Finally, we copy the cached KV blocks and the newly computed KV tensors into a single unified cache for the request. The cached blocks are looked up by hash and appended in order, followed by the fresh tensors. The result is a complete KV cache covering the entire prompt, as if we had prefilled from scratch — but with most of the GPU work skipped.
+**Assemble the full KV cache.** Finally, we copy the cached KV blocks and the newly computed KV tensors into a single unified cache for the request. The cached blocks are looked up by hash and appended in order, followed by the fresh tensors. The result is a complete KV cache covering the entire prompt, as if we had prefilled from scratch - but with most of the GPU work skipped.
 
 ## How It All Fits Together
 
@@ -494,11 +494,11 @@ graph LR
     style E fill:#10b981,stroke:#047857,color:#fff;
 </div>
 
-1. **`_maybe_admit`** — the scheduler checks if there's room for a new request.
-2. **`find_cached_prefix`** — walks the prompt's blocks against the global cache to count how many tokens are already cached.
-3. **`load_cached_blocks`** — copies the cached KV tensors into the request's local cache and advances `prefill_cursor`.
-4. **Transformer forward pass** — only the uncached suffix tokens are actually computed.
-5. **`commit_completed_blocks`** — after prefill, any newly completed full blocks are cloned and inserted into the global cache for future requests.
+1. **`_maybe_admit`** - the scheduler checks if there's room for a new request.
+2. **`find_cached_prefix`** - walks the prompt's blocks against the global cache to count how many tokens are already cached.
+3. **`load_cached_blocks`** - copies the cached KV tensors into the request's local cache and advances `prefill_cursor`.
+4. **Transformer forward pass** - only the uncached suffix tokens are actually computed.
+5. **`commit_completed_blocks`** - after prefill, any newly completed full blocks are cloned and inserted into the global cache for future requests.
 
 ## Tests
 
@@ -535,10 +535,10 @@ tile; nob'
 
 We can see that in our case:
 
-1. Request 0 — 0 cache hits (empty cache), full 18-token prefill from scratch
-2. Request 1 — 16/18 tokens cached (4 blocks hit), only 2 trailing tokens to prefill — 89% of prefill work skipped
-3. Cache size — 4 blocks total, no duplicates despite two identical requests
-4. Different outputs — expected because torch.multinomial RNG state differs between decode phases; the cache guarantees identical KV values, not identical sampling
+1. Request 0 - 0 cache hits (empty cache), full 18-token prefill from scratch
+2. Request 1 - 16/18 tokens cached (4 blocks hit), only 2 trailing tokens to prefill - 89% of prefill work skipped
+3. Cache size - 4 blocks total, no duplicates despite two identical requests
+4. Different outputs - expected because torch.multinomial RNG state differs between decode phases; the cache guarantees identical KV values, not identical sampling
 
 ### Test 2: Shared Prefix, Different Suffixes
 
@@ -574,11 +574,11 @@ for req in reqs:
     assert req.num_generated == 10
     print(f"  Req {req.id}: '{decode(req.tokens_so_far)}'")
 
-print("✅ Test 2 passed — req 1 reused shared prefix blocks from req 0")
+print("✅ Test 2 passed - req 1 reused shared prefix blocks from req 0")
 
 ```
 
-In this test, we construct two requests that share the same 12-token prefix (`"Hello world "`) but diverge at the suffix — Req 0 appends `"cat"` and Req 1 appends `"dog"`. This is the most common real-world scenario: a shared system prompt with different user queries. The test verifies that the cache correctly reuses the 3 full blocks from the shared prefix (12 tokens ÷ 4 tokens per block = 3 blocks), while computing new KV values only for the diverging suffix tokens. The assertion checks that at least 3 blocks are cached after both requests complete.
+In this test, we construct two requests that share the same 12-token prefix (`"Hello world "`) but diverge at the suffix - Req 0 appends `"cat"` and Req 1 appends `"dog"`. This is the most common real-world scenario: a shared system prompt with different user queries. The test verifies that the cache correctly reuses the 3 full blocks from the shared prefix (12 tokens ÷ 4 tokens per block = 3 blocks), while computing new KV values only for the diverging suffix tokens. The assertion checks that at least 3 blocks are cached after both requests complete.
 
 Here is the result:
 
@@ -590,19 +590,19 @@ Test 2: Shared prefix, different suffix
   Cache size: 3 blocks
   Req 0: 'Hello world cative as fat'
   Req 1: 'Hello world dog, your jus'
-✅ Test 2 passed — req 1 reused shared prefix blocks from req 0
+✅ Test 2 passed - req 1 reused shared prefix blocks from req 0
 ```
 
-The cache contains exactly **3 blocks** — the 3 full blocks from the shared `"Hello world "` prefix. Even though the two requests have different suffixes (`"cat"` vs `"dog"`), the shared prefix blocks are identical and only get cached once. Request 1 hit all 3 blocks during admission, skipping 12 tokens of prefill and only computing KV values for its unique `"dog"` suffix.
+The cache contains exactly **3 blocks** - the 3 full blocks from the shared `"Hello world "` prefix. Even though the two requests have different suffixes (`"cat"` vs `"dog"`), the shared prefix blocks are identical and only get cached once. Request 1 hit all 3 blocks during admission, skipping 12 tokens of prefill and only computing KV values for its unique `"dog"` suffix.
 
-Notice that the outputs diverge after `"Hello world "` — Req 0 generates `"cative as fat"` while Req 1 generates `"dog, your jus"`. This is correct: the suffix tokens (`"cat"` vs `"dog"`) produce different KV values from the divergence point onward, leading to different attention contexts and therefore different generated continuations. The cache correctly avoided sharing any blocks past the divergence point because the chained hashes differ once the token content changes.
+Notice that the outputs diverge after `"Hello world "` - Req 0 generates `"cative as fat"` while Req 1 generates `"dog, your jus"`. This is correct: the suffix tokens (`"cat"` vs `"dog"`) produce different KV values from the divergence point onward, leading to different attention contexts and therefore different generated continuations. The cache correctly avoided sharing any blocks past the divergence point because the chained hashes differ once the token content changes.
 
 
 ### Test 3: No Shared Prefix
 
 ```python
 # ══════════════════════════════════════════════════════════════
-# Test 3: No shared prefix — full prefill for both
+# Test 3: No shared prefix - full prefill for both
 # ══════════════════════════════════════════════════════════════
 print("=" * 60)
 print("Test 3: No shared prefix")
@@ -618,14 +618,14 @@ reqs = [
 
 s = scheduled_generate(model, reqs, policy="fcfs", token_budget=16, max_kv_tokens=256)
 
-# Both prompts are different — no blocks should be shared between them
+# Both prompts are different - no blocks should be shared between them
 # Cache should contain blocks from BOTH requests independently
 total_blocks_req0 = len(reqs[0].prompt_tokens) // BLOCK_SIZE
 total_blocks_req1 = len(reqs[1].prompt_tokens) // BLOCK_SIZE
 print(f"  Req 0 blocks: {total_blocks_req0}, Req 1 blocks: {total_blocks_req1}")
 print(f"  Cache size: {len(s.block_cache.cache)} blocks")
 
-# No sharing — cache should have blocks from both, none reused
+# No sharing - cache should have blocks from both, none reused
 assert len(s.block_cache.cache) >= total_blocks_req0 + total_blocks_req1, \
     f"❌ Expected {total_blocks_req0 + total_blocks_req1} total blocks (no sharing)"
 
@@ -634,10 +634,10 @@ for req in reqs:
     assert req.num_generated == 10
     print(f"  Req {req.id}: '{decode(req.tokens_so_far)}'")
 
-print("✅ Test 3 passed — 0 cache hits, full prefill for both")
+print("✅ Test 3 passed - 0 cache hits, full prefill for both")
 ```
 
-This is the negative case — a sanity check that the cache doesn't produce false hits. The two prompts (`"The cat sat on the mat"` and `"Once upon a midnight"`) share no common prefix, so every block in both requests should have a unique chained hash. The test verifies that both requests do a full prefill with zero cache hits, and that the cache stores blocks from both requests independently (no sharing, no deduplication). The assertion checks that the total cache size equals the sum of both requests' full blocks.
+This is the negative case - a sanity check that the cache doesn't produce false hits. The two prompts (`"The cat sat on the mat"` and `"Once upon a midnight"`) share no common prefix, so every block in both requests should have a unique chained hash. The test verifies that both requests do a full prefill with zero cache hits, and that the cache stores blocks from both requests independently (no sharing, no deduplication). The assertion checks that the total cache size equals the sum of both requests' full blocks.
 
 Here is the result:
 
@@ -649,12 +649,12 @@ Test 3: No shared prefix
   Cache size: 10 blocks
   Req 0: 'The cat sat on the matter's nobl'
   Req 1: 'Once upon a midnight his E'emi'
-✅ Test 3 passed — 0 cache hits, full prefill for both
+✅ Test 3 passed - 0 cache hits, full prefill for both
 ```
 
-The cache contains **10 blocks** — 5 from each request, with zero overlap. This confirms that the chained hashing correctly distinguishes blocks with entirely different prefix histories. Even if some individual tokens happened to appear in both prompts (e.g., `"the"`), the chained hash prevents false sharing because the parent hashes differ from block 0 onward.
+The cache contains **10 blocks** - 5 from each request, with zero overlap. This confirms that the chained hashing correctly distinguishes blocks with entirely different prefix histories. Even if some individual tokens happened to appear in both prompts (e.g., `"the"`), the chained hash prevents false sharing because the parent hashes differ from block 0 onward.
 
-Both requests completed with full prefill work, and the cache faithfully stored all blocks from both. If a third request arrived with a prefix matching either prompt, it would get cache hits against the appropriate set of 5 blocks — the cache is doing its job of building up a library of reusable prefixes over time, even when the first two requests don't benefit from each other.
+Both requests completed with full prefill work, and the cache faithfully stored all blocks from both. If a third request arrived with a prefix matching either prompt, it would get cache hits against the appropriate set of 5 blocks - the cache is doing its job of building up a library of reusable prefixes over time, even when the first two requests don't benefit from each other.
 
 ### Test 4: Cache Eviction Under Memory Pressure
 
@@ -672,7 +672,7 @@ torch.manual_seed(42)
 
 # Use a tiny cache: only 3 block slots
 prompt_a = encode("The cat sat on the mat and then")  # ~8 blocks worth
-prompt_b = encode("The cat sat on the mat and then")  # identical — should hit
+prompt_b = encode("The cat sat on the mat and then")  # identical - should hit
 
 # Run req 0 first to fill the cache, then req 1 to check hits
 req0 = Request(id=0, prompt_tokens=prompt_a, max_new_tokens=5)
@@ -683,13 +683,13 @@ s = Scheduler(policy="fcfs", token_budget=16, max_kv_tokens=256, block_size=BLOC
 s.block_cache = BlockCache(max_blocks=3)  # only room for 3 blocks!
 
 # Run them through scheduled_generate but with this custom scheduler
-# (We need to manually wire this — or just test BlockCache directly)
+# (We need to manually wire this - or just test BlockCache directly)
 
 # Direct BlockCache test:
 cache = BlockCache(max_blocks=3)
 parent_hash = NONE_HASH
 
-# Insert 4 blocks — the 4th should evict the 1st (LRU)
+# Insert 4 blocks - the 4th should evict the 1st (LRU)
 for i in range(4):
     tokens = prompt_a[i*BLOCK_SIZE : (i+1)*BLOCK_SIZE]
     if len(tokens) < BLOCK_SIZE:
@@ -714,11 +714,11 @@ for block in cache.cache.values():
 
 print(f"  Cache size: {len(cache.cache)} (max: 3)")
 print(f"  Remaining blocks accessed at steps: {[b.last_access_step for b in cache.cache.values()]}")
-print("✅ Test 4 passed — LRU eviction works correctly")
+print("✅ Test 4 passed - LRU eviction works correctly")
 
 ```
 
-This test verifies that the `BlockCache` correctly evicts the least-recently-used block when it runs out of space. We set `max_blocks=3` — an artificially tiny cache — and insert 4 blocks sequentially with `last_access_step` values of 0, 1, 2, 3. When the 4th block is inserted, the cache exceeds capacity and must evict one block. The LRU policy should evict the block with `last_access_step=0` (the oldest). The assertions check two things: (1) the cache never exceeds 3 blocks, and (2) the evicted block is specifically the one with step 0.
+This test verifies that the `BlockCache` correctly evicts the least-recently-used block when it runs out of space. We set `max_blocks=3` - an artificially tiny cache - and insert 4 blocks sequentially with `last_access_step` values of 0, 1, 2, 3. When the 4th block is inserted, the cache exceeds capacity and must evict one block. The LRU policy should evict the block with `last_access_step=0` (the oldest). The assertions check two things: (1) the cache never exceeds 3 blocks, and (2) the evicted block is specifically the one with step 0.
 
 Here is the result:
 
@@ -728,10 +728,10 @@ Test 4: Cache eviction under memory pressure
 ============================================================
   Cache size: 3 (max: 3)
   Remaining blocks accessed at steps: [1, 2, 3]
-✅ Test 4 passed — LRU eviction works correctly
+✅ Test 4 passed - LRU eviction works correctly
 ```
 
-The remaining blocks have access steps `[1, 2, 3]` — step 0 is gone, confirming that `_evict_lru` correctly identified and removed the oldest block. This is the same eviction strategy used in production systems like vLLM: when GPU memory is full, the least-recently-accessed KV blocks are discarded first. The rationale is that blocks accessed recently are more likely to be needed again (e.g., a popular system prompt), while stale blocks from old requests are safe to discard. If a future request needs an evicted block, it simply re-prefills those tokens — a cache miss costs compute, not correctness.
+The remaining blocks have access steps `[1, 2, 3]` - step 0 is gone, confirming that `_evict_lru` correctly identified and removed the oldest block. This is the same eviction strategy used in production systems like vLLM: when GPU memory is full, the least-recently-accessed KV blocks are discarded first. The rationale is that blocks accessed recently are more likely to be needed again (e.g., a popular system prompt), while stale blocks from old requests are safe to discard. If a future request needs an evicted block, it simply re-prefills those tokens - a cache miss costs compute, not correctness.
 
 Thanks for reading! You can find the entire source code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_prefix_caching.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_prefix_caching.ipynb)
 

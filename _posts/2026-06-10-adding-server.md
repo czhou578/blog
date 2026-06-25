@@ -7,7 +7,7 @@ image: https://czhou578.github.io/blog/images/server_architecture.png
 
 Up until now, the NanoGPT inference engine has been a Python function that you call from the same process. You pass in a list of `Request` objects, call `scheduled_generate()`, and it runs the scheduler loop until all requests are done. That's fine for benchmarking and correctness tests, but it's not how anyone actually uses an LLM.
 
-In production, inference servers expose an HTTP API. Clients send prompts, and the server streams tokens back as they're generated. The client doesn't wait for the full response — each token arrives over the wire as soon as it's produced. These are Server-Sent Events (SSE), and it's what makes ChatGPT's typing animation work on the frontend console.
+In production, inference servers expose an HTTP API. Clients send prompts, and the server streams tokens back as they're generated. The client doesn't wait for the full response - each token arrives over the wire as soon as it's produced. These are Server-Sent Events (SSE), and it's what makes ChatGPT's typing animation work on the frontend console.
 
 This post adds a streaming HTTP server to our NanoGPT inference engine. The server takes our existing scheduler, radix tree, chunked prefill, and continuous batching code and wraps it in a FastAPI application that accepts concurrent requests over HTTP and streams tokens back in real-time.
 
@@ -17,9 +17,9 @@ The interesting part is the **threading boundary** between the async HTTP layer 
 
 ## The problem: two incompatible execution models
 
-Our inference engine runs a tight synchronous loop: call `scheduler.schedule()`, run a model forward pass, sample tokens, update KV caches, repeat. This loop **must** be synchronous because PyTorch operations are blocking — `model(input_ids, pos=pos, past_kvs=past_kvs)` doesn't return until the GPU (or CPU) finishes the computation.
+Our inference engine runs a tight synchronous loop: call `scheduler.schedule()`, run a model forward pass, sample tokens, update KV caches, repeat. This loop **must** be synchronous because PyTorch operations are blocking - `model(input_ids, pos=pos, past_kvs=past_kvs)` doesn't return until the GPU (or CPU) finishes the computation.
 
-But HTTP servers need to be asynchronous. When a client sends a request, the server can't block the entire process waiting for 50 tokens to be generated — other clients would be locked out. FastAPI uses `asyncio` for this: each request gets a coroutine that can yield control while waiting for data.
+But HTTP servers need to be asynchronous. When a client sends a request, the server can't block the entire process waiting for 50 tokens to be generated - other clients would be locked out. FastAPI uses `asyncio` for this: each request gets a coroutine that can yield control while waiting for data.
 
 You can't `await` a PyTorch forward pass, and you can't run `asyncio` inside a blocking inference loop. The solution is to put them in separate threads and connect them with thread-safe queues.
 
@@ -36,12 +36,12 @@ def _load_engine_module():
     spec.loader.exec_module(mod)
     return mod
 
-E = _load_engine_module()  # short alias — all engine symbols live here
+E = _load_engine_module()  # short alias - all engine symbols live here
 ```
 
-The engine file has a non-standard filename (`nanogpt-radix-tree-.py` — the dash makes it un-importable with a normal `import` statement). So we use `importlib.util` to load it manually. `spec_from_file_location` creates a module spec from the file path, `module_from_spec` creates an empty module object, and `exec_module` runs the file's code to populate it. The result is a module `E` that contains all our engine classes — `E.GPTLanguageModel`, `E.Scheduler`, `E.Request`, `E.RadixTree`, `E.encode`, `E.decode`, etc.
+The engine file has a non-standard filename (`nanogpt-radix-tree-.py` - the dash makes it un-importable with a normal `import` statement). So we use `importlib.util` to load it manually. `spec_from_file_location` creates a module spec from the file path, `module_from_spec` creates an empty module object, and `exec_module` runs the file's code to populate it. The result is a module `E` that contains all our engine classes - `E.GPTLanguageModel`, `E.Scheduler`, `E.Request`, `E.RadixTree`, `E.encode`, `E.decode`, etc.
 
-The `if __name__ == "__main__"` guard in the engine file prevents the training loop and benchmarks from running when we import it — only the class definitions and function definitions are executed.
+The `if __name__ == "__main__"` guard in the engine file prevents the training loop and benchmarks from running when we import it - only the class definitions and function definitions are executed.
 
 ## Training at startup
 
@@ -68,9 +68,9 @@ def _train_model():
 MODEL = _train_model()
 ```
 
-The model trains when the server process starts. This is a deliberate simplification — a production server would load pretrained weights from a checkpoint. But since our model is tiny (57K parameters, 120 training iterations on Tiny Shakespeare), training takes a few seconds and saves us from managing checkpoint files.
+The model trains when the server process starts. This is a deliberate simplification - a production server would load pretrained weights from a checkpoint. But since our model is tiny (57K parameters, 120 training iterations on Tiny Shakespeare), training takes a few seconds and saves us from managing checkpoint files.
 
-`model.eval()` at the end switches the model from training mode to inference mode. This disables dropout and sets batch norm to use running statistics. The `MODEL` variable is module-level — it's created once and shared by all requests for the lifetime of the server process.
+`model.eval()` at the end switches the model from training mode to inference mode. This disables dropout and sets batch norm to use running statistics. The `MODEL` variable is module-level - it's created once and shared by all requests for the lifetime of the server process.
 
 ## The InferenceEngine class
 
@@ -105,7 +105,7 @@ class InferenceEngine:
 
 There's a lot going on in this `__init__`, so let me walk through the design decisions:
 
-**`self.scheduler`** is a regular `Scheduler` instance; the same one we used in the benchmark scripts. It manages the waiting, prefilling, and active queues, and owns the radix tree for prefix caching. Nothing about the scheduler changes for the server — it's still a synchronous, single-threaded component.
+**`self.scheduler`** is a regular `Scheduler` instance; the same one we used in the benchmark scripts. It manages the waiting, prefilling, and active queues, and owns the radix tree for prefix caching. Nothing about the scheduler changes for the server - it's still a synchronous, single-threaded component.
 
 **`self._pending`** is the inbox. HTTP handlers write new requests here, and the engine thread reads from it. This is the crossing point between the two threads, which is why it has a `threading.Lock` guarding it. We use a plain list instead of `queue.Queue` because we want to drain all pending requests at once at the top of each engine loop iteration (batch drain), not pull them one at a time.
 
@@ -137,9 +137,9 @@ def submit(self, prompt_tokens: list[int], max_tokens: int) -> tuple[int, asynci
     return req_id, queue
 ```
 
-`submit()` is called from the FastAPI handler (main thread). It creates an `E.Request` object — the exact same dataclass the benchmark harness uses — and drops it into `self._pending` under the lock. It also creates an `asyncio.Queue` for this request and stores the submit time (for TTFT measurement later).
+`submit()` is called from the FastAPI handler (main thread). It creates an `E.Request` object - the exact same dataclass the benchmark harness uses - and drops it into `self._pending` under the lock. It also creates an `asyncio.Queue` for this request and stores the submit time (for TTFT measurement later).
 
-The caller gets back `(req_id, queue)`. The queue is the channel for receiving tokens — the HTTP handler will `await queue.get()` in a loop, yielding each token to the client as an SSE event.
+The caller gets back `(req_id, queue)`. The queue is the channel for receiving tokens - the HTTP handler will `await queue.get()` in a loop, yielding each token to the client as an SSE event.
 
 ## The thread boundary
 
@@ -158,7 +158,7 @@ def _drain_pending(self):
         self.scheduler.add_request(req)
 ```
 
-`_drain_pending()` is called at the top of every engine loop iteration. It grabs all pending requests under the lock, clears the list, and adds them to the scheduler. The lock is held for the minimum possible time — just long enough to copy the list and clear it. This avoids contention: HTTP handlers can keep submitting requests while the engine processes the current batch.
+`_drain_pending()` is called at the top of every engine loop iteration. It grabs all pending requests under the lock, clears the list, and adds them to the scheduler. The lock is held for the minimum possible time - just long enough to copy the list and clear it. This avoids contention: HTTP handlers can keep submitting requests while the engine processes the current batch.
 
 ```python
 def _put(self, req_id: int, item):
@@ -168,7 +168,7 @@ def _put(self, req_id: int, item):
         self._loop.call_soon_threadsafe(q.put_nowait, item)
 ```
 
-This is the key method. `_put()` pushes a token into the asyncio queue from the engine thread. You can't just call `q.put_nowait(item)` directly — `asyncio.Queue` is not thread-safe. Instead, we use `self._loop.call_soon_threadsafe()`, which schedules the `put_nowait` call on the asyncio event loop's thread. This is the standard pattern for pushing data from a background thread into asyncio.
+This is the key method. `_put()` pushes a token into the asyncio queue from the engine thread. You can't just call `q.put_nowait(item)` directly - `asyncio.Queue` is not thread-safe. Instead, we use `self._loop.call_soon_threadsafe()`, which schedules the `put_nowait` call on the asyncio event loop's thread. This is the standard pattern for pushing data from a background thread into asyncio.
 
 ```python
 def _finish(self, req_id: int):
@@ -183,7 +183,7 @@ When a request is done, `_finish()` pushes a `None` sentinel into the queue (sig
 
 ```python
 def run_loop(self):
-    """Main engine loop — mirrors scheduled_generate but never terminates."""
+    """Main engine loop - mirrors scheduled_generate but never terminates."""
     self.model.eval()
 
     with torch.no_grad():
@@ -273,7 +273,7 @@ The new part is what happens when prefill completes:
             })
 ```
 
-After prefill finishes and the first token is sampled, we insert the prompt's KV data into the radix tree (so future requests with the same prefix can skip prefill), unlock the tree path, promote the request to the active decode queue, and — this is the new part — **stream the first token back to the client**.
+After prefill finishes and the first token is sampled, we insert the prompt's KV data into the radix tree (so future requests with the same prefix can skip prefill), unlock the tree path, promote the request to the active decode queue, and - this is the new part - **stream the first token back to the client**.
 
 The `self._put()` call pushes a dict with the decoded token string, the raw token ID, an `is_first` flag, and the TTFT measurement (time from `submit()` to this moment, in milliseconds). The client sees this as the first SSE event in the stream.
 
@@ -324,7 +324,7 @@ if decode_reqs:
 
 The decode step batches all active requests together using `assemble_batch_cache` (left-padding shorter caches so the batch is rectangular), runs one forward pass, and scatters the results back with `disassemble_batch_cache`. This is the same continuous batching we built in the earlier posts.
 
-The new addition: after each token is sampled, it's immediately pushed to the corresponding client's queue via `self._put()`. The client doesn't wait for all 50 tokens — each one arrives as soon as it's computed. This is what makes the streaming feel real-time.
+The new addition: after each token is sampled, it's immediately pushed to the corresponding client's queue via `self._put()`. The client doesn't wait for all 50 tokens - each one arrives as soon as it's computed. This is what makes the streaming feel real-time.
 
 When a request hits its `max_new_tokens` limit, `self._finish()` sends the `None` sentinel and cleans up. The client's SSE stream closes cleanly.
 
@@ -340,7 +340,7 @@ class CompletionRequest(BaseModel):
     max_tokens: int = 50
 ```
 
-The `engine` instance is created at module level — one engine per server process. `CompletionRequest` is a Pydantic model that validates incoming JSON. If a client sends `{"prompt": "First Citizen:", "max_tokens": 50}`, Pydantic parses it into a typed object. If `max_tokens` is omitted, it defaults to 50.
+The `engine` instance is created at module level - one engine per server process. `CompletionRequest` is a Pydantic model that validates incoming JSON. If a client sends `{"prompt": "First Citizen:", "max_tokens": 50}`, Pydantic parses it into a typed object. If `max_tokens` is omitted, it defaults to 50.
 
 ### Startup: wiring the threads together
 
@@ -353,7 +353,7 @@ async def startup():
     print("Engine loop started.")
 ```
 
-`startup()` runs once when the FastAPI application starts. It does two things: saves a reference to the asyncio event loop (so the engine thread can use `call_soon_threadsafe`), and launches the engine loop in a daemon thread. `daemon=True` means the thread dies when the main process exits — no cleanup needed.
+`startup()` runs once when the FastAPI application starts. It does two things: saves a reference to the asyncio event loop (so the engine thread can use `call_soon_threadsafe`), and launches the engine loop in a daemon thread. `daemon=True` means the thread dies when the main process exits - no cleanup needed.
 
 This is the moment the two threads begin their independent lives. The main thread runs the asyncio event loop (handling HTTP requests), and the engine thread runs the inference loop (doing PyTorch forward passes).
 
@@ -382,7 +382,7 @@ This is the HTTP endpoint. When a client POSTs to `/v1/completions`, the handler
 
 The `stream()` generator loops forever, `await`ing on the queue. Each time the engine pushes a token, `queue.get()` unblocks and the generator yields an SSE line (`data: {...}\n\n`). When the engine sends `None`, the generator yields a final `done` event with the full accumulated text and breaks.
 
-`StreamingResponse` with `media_type="text/event-stream"` tells FastAPI to keep the HTTP connection open and flush each `yield` to the client immediately. This is standard SSE — the client sees tokens appearing one by one as they're generated.
+`StreamingResponse` with `media_type="text/event-stream"` tells FastAPI to keep the HTTP connection open and flush each `yield` to the client immediately. This is standard SSE - the client sees tokens appearing one by one as they're generated.
 
 ### Health check
 
@@ -398,7 +398,7 @@ def health():
     }
 ```
 
-A simple diagnostic endpoint. `curl localhost:8000/health` returns the current engine state — how many requests are in each queue, what step the engine is on, and how many requests are waiting to be drained from the pending list. Useful for debugging concurrency issues.
+A simple diagnostic endpoint. `curl localhost:8000/health` returns the current engine state - how many requests are in each queue, what step the engine is on, and how many requests are waiting to be drained from the pending list. Useful for debugging concurrency issues.
 
 ## Using it
 
@@ -443,7 +443,7 @@ curl -N ... -d '{"prompt": "First Citizen: We are accounted poor", "max_tokens":
 curl -N ... -d '{"prompt": "First Citizen: We are accounted poor", "max_tokens": 20}'
 ```
 
-The second request skips prefill for the shared prefix — the KV cache is loaded from the radix tree. You'll see a lower TTFT on the second request.
+The second request skips prefill for the shared prefix - the KV cache is loaded from the radix tree. You'll see a lower TTFT on the second request.
 
 ## What this doesn't do
 
@@ -456,7 +456,7 @@ This server is intentionally minimal. A production inference server (vLLM, SGLan
 - **OpenAI-compatible API.** Our endpoint is a simplified version. The real OpenAI API has `stream: true`, `stop` sequences, `temperature`, `top_p`, and many more parameters.
 - **Graceful shutdown.** We don't drain active requests on SIGTERM. The daemon thread just dies.
 
-But the core architecture — background engine thread, asyncio queue bridge, SSE streaming — is the same pattern that production servers use. The complexity is in the optimizations, not the skeleton.
+But the core architecture - background engine thread, asyncio queue bridge, SSE streaming - is the same pattern that production servers use. The complexity is in the optimizations, not the skeleton.
 
 You can find the full source code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/server.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/server.py)
 

@@ -4,9 +4,9 @@ title: "NanoGPT - Radix Tree Prefix Caching"
 date: 2026-06-09
 ---
 
-In the [previous post](/blog/2026/05/22/prefix-caching), we built a hash-chained prefix cache — a flat map of `(parent_hash, token_ids) → KV block` that lets requests skip redundant prefill work when they share a common prompt prefix. It works, but it has a pretty fundamental limitation: it doesn't know what a *tree* is.
+In the [previous post](/blog/2026/05/22/prefix-caching), we built a hash-chained prefix cache - a flat map of `(parent_hash, token_ids) → KV block` that lets requests skip redundant prefill work when they share a common prompt prefix. It works, but it has a pretty fundamental limitation: it doesn't know what a *tree* is.
 
-Consider a multi-turn conversation where a user asks two follow-up questions branching off the same context. The flat cache stores each block independently with MD5 hashes. It has no idea that blocks 0, 1, and 2 form a shared trunk that both branches depend on. So when memory gets tight, the LRU eviction policy might evict block 1 — silently orphaning everything downstream and making the cache useless.
+Consider a multi-turn conversation where a user asks two follow-up questions branching off the same context. The flat cache stores each block independently with MD5 hashes. It has no idea that blocks 0, 1, and 2 form a shared trunk that both branches depend on. So when memory gets tight, the LRU eviction policy might evict block 1 - silently orphaning everything downstream and making the cache useless.
 
 This post replaces the flat cache with a **radix tree** (compressed trie), which is the same data structure that SGLang uses in production for RadixAttention. The tree structure makes prefix sharing explicit: shared trunks are interior nodes, branches are children, and eviction only happens at leaves. The result is dramatically better behavior under memory pressure.
 
@@ -27,9 +27,9 @@ Here's the summary across six benchmark scenarios:
 | `low_reuse_control` | 8 | 192 | 0 | 0 | 0.0% | 0.0% | 0.87x | 0.99x | 0 | 0 |
 | `eviction_pressure` | 24 | 576 | **0** | **288** | **0.0%** | **79.2%** | 0.76x | 0.91x | **136** | **0** |
 
-Two things jump out immediately. First, the radix tree beats the flat cache in every single scenario — higher hit rates, higher throughput, fewer evictions. Second, look at the eviction pressure row: the flat cache achieves a 0% hit rate with 136 evictions (it thrashes constantly and gets nothing useful), while the radix tree gets 79.2% with zero evictions. That's the structural advantage showing up clearly.
+Two things jump out immediately. First, the radix tree beats the flat cache in every single scenario - higher hit rates, higher throughput, fewer evictions. Second, look at the eviction pressure row: the flat cache achieves a 0% hit rate with 136 evictions (it thrashes constantly and gets nothing useful), while the radix tree gets 79.2% with zero evictions. That's the structural advantage showing up clearly.
 
-I should note: both caching strategies are actually *slower* than no caching in most scenarios. That's expected for our tiny model — the caching overhead (lookups, KV slicing, tree management) dominates when the actual matmuls take microseconds. The point is to demonstrate the mechanism, not to show production speedups.
+I should note: both caching strategies are actually *slower* than no caching in most scenarios. That's expected for our tiny model - the caching overhead (lookups, KV slicing, tree management) dominates when the actual matmuls take microseconds. The point is to demonstrate the mechanism, not to show production speedups.
 
 ## Why the flat cache breaks down
 
@@ -50,26 +50,26 @@ Flat cache entries (no relationships):
 
 The flat map doesn't know that hash_0 through hash_2 form a shared trunk that both hash_3a and hash_3b depend on. They're just five unrelated entries.
 
-**Blind eviction.** LRU on a flat map is dangerous. If the eviction policy removes hash_1, then hash_2, hash_3a, and hash_3b all become orphans — their chained hashes depend on hash_1 existing, so lookup walks will fail. The cache evicts a critical interior block while keeping useless leaf blocks. This is exactly what we see in the eviction pressure benchmark: 136 evictions, 0% hit rate.
+**Blind eviction.** LRU on a flat map is dangerous. If the eviction policy removes hash_1, then hash_2, hash_3a, and hash_3b all become orphans - their chained hashes depend on hash_1 existing, so lookup walks will fail. The cache evicts a critical interior block while keeping useless leaf blocks. This is exactly what we see in the eviction pressure benchmark: 136 evictions, 0% hit rate.
 
-**Redundant traversal.** Every call to `find_cached_prefix()` re-walks from block 0, re-hashing and re-looking-up every block in the chain. With a tree, shared prefixes are implicit edges — you walk once from root to the match point.
+**Redundant traversal.** Every call to `find_cached_prefix()` re-walks from block 0, re-hashing and re-looking-up every block in the chain. With a tree, shared prefixes are implicit edges - you walk once from root to the match point.
 
 ## The radix tree
 
-The fix is to make the prefix structure explicit. A radix tree (compressed trie) stores token sequences as paths from root to leaf. Shared prefixes are shared edges — stored once, referenced by all requests that pass through them.
+The fix is to make the prefix structure explicit. A radix tree (compressed trie) stores token sequences as paths from root to leaf. Shared prefixes are shared edges - stored once, referenced by all requests that pass through them.
 
 ### A concrete example: multi-turn conversation
 
 To see why this matters, let's walk through a multi-turn conversation and watch the tree evolve step by step.
 
-**Turn 1 — initial prompt.** A user sends: `"You are a helpful assistant. What is a radix tree?"` The tokenized prompt is `[101, 202, 303, 404, 505, 606, 707, 808]`. After prefill, the tree has one path:
+**Turn 1 - initial prompt.** A user sends: `"You are a helpful assistant. What is a radix tree?"` The tokenized prompt is `[101, 202, 303, 404, 505, 606, 707, 808]`. After prefill, the tree has one path:
 
 ```
 ROOT
  └─ [101, 202, 303, 404, 505, 606, 707, 808]   ← KV for positions 0–7
 ```
 
-**Turn 2 — first follow-up.** The user asks: `"Give me a code example."` The full prompt is the original 8 tokens plus the follow-up tokens `[909, 110, 211, 312]`. The tree matches the first 8 tokens from the cache (skipping all of that prefill work), then inserts the new suffix:
+**Turn 2 - first follow-up.** The user asks: `"Give me a code example."` The full prompt is the original 8 tokens plus the follow-up tokens `[909, 110, 211, 312]`. The tree matches the first 8 tokens from the cache (skipping all of that prefill work), then inserts the new suffix:
 
 ```
 ROOT
@@ -77,7 +77,7 @@ ROOT
       └─ [909, 110, 211, 312]                    ← follow-up A
 ```
 
-**Turn 3 — second follow-up (branching).** The user goes back and asks a different question instead: `"How does it compare to a trie?"` This shares the same 8-token trunk but has different follow-up tokens `[413, 514, 615, 716]`. The tree matches the trunk again, then creates a second branch:
+**Turn 3 - second follow-up (branching).** The user goes back and asks a different question instead: `"How does it compare to a trie?"` This shares the same 8-token trunk but has different follow-up tokens `[413, 514, 615, 716]`. The tree matches the trunk again, then creates a second branch:
 
 ```
 ROOT
@@ -86,7 +86,7 @@ ROOT
       └─ [413, 514, 615, 716]                    ← follow-up B
 ```
 
-The trunk's KV data is stored **once** and reused by both branches. If memory gets tight, the eviction policy can remove either leaf without affecting the shared trunk — the interior node is structurally protected.
+The trunk's KV data is stored **once** and reused by both branches. If memory gets tight, the eviction policy can remove either leaf without affecting the shared trunk - the interior node is structurally protected.
 
 Now imagine a flat cache holding the same data. It has 12 independent hash entries with no knowledge that entries 0–7 form a shared prefix. Evicting any one of them orphans everything downstream. The radix tree makes this impossible by construction.
 
@@ -98,7 +98,7 @@ class RadixNode:
     parent: Optional[RadixNode]      # back-pointer for path walking
     token_ids: Tuple[int, ...]       # variable-length token sequence (compressed edge)
     kv_data: Optional[Dict]          # KV cache tensors for this edge's tokens
-    lock_ref: int                    # reference count — active requests pin this node
+    lock_ref: int                    # reference count - active requests pin this node
     last_access_time: int            # for LRU eviction among leaves
 ```
 
@@ -113,12 +113,12 @@ The central operation walks the tree from root, consuming query tokens as it mat
 1. At each node, look up `children[next_token]`
 2. Compare the query against the child's full edge token sequence
 3. If the edge fully matches, move to the child and continue
-4. If the match ends mid-edge, stop — we've found the exact divergence point
+4. If the match ends mid-edge, stop - we've found the exact divergence point
 5. If no child starts with the next token, stop
 
-When we find a match, we collect KV data from every node along the path. The request's KV cache is built by concatenating these tensors in order — the tree walk naturally produces the full cached prefix.
+When we find a match, we collect KV data from every node along the path. The request's KV cache is built by concatenating these tensors in order - the tree walk naturally produces the full cached prefix.
 
-### Splitting nodes — the tricky part
+### Splitting nodes - the tricky part
 
 ![Radix Tree Node Splitting]({{ site.baseurl }}/images/radix_node_splitting.png)
 
@@ -126,7 +126,7 @@ This is where things get interesting. When a new sequence partially matches an e
 
 ```
 Before: root → [10, 20, 30, 40] (node A, KV for positions 0-3)
-Query:  [10, 20, 50, 60]  — match stops at position 2
+Query:  [10, 20, 50, 60]  - match stops at position 2
 
 After:  root → [10, 20] (new mid-node B, KV for positions 0-1)
                    → [30, 40] (old node A, KV for positions 2-3)
@@ -238,7 +238,7 @@ def evict_lru(self) -> bool:
     return True
 ```
 
-The structural guarantee: an interior node (shared prefix) **cannot be evicted** while it still has children depending on it. The tree topology prevents orphaned blocks by construction. This is why the eviction pressure benchmark shows 0 evictions for the radix tree — interior nodes are protected.
+The structural guarantee: an interior node (shared prefix) **cannot be evicted** while it still has children depending on it. The tree topology prevents orphaned blocks by construction. This is why the eviction pressure benchmark shows 0 evictions for the radix tree - interior nodes are protected.
 
 Compare this to the flat cache, which has no concept of "interior" vs "leaf." It evicts any block regardless of what depends on it. That's why it thrashes to a 0% hit rate under memory pressure.
 
@@ -304,16 +304,16 @@ The scheduler changes are minimal. The `BlockCache` gets replaced with a `RadixT
 
 | Operation | Flat Cache | Radix Tree |
 |---|---|---|
-| Check prefix | `find_cached_prefix()` — hash-chain walk | `match_prefix()` — tree traversal |
+| Check prefix | `find_cached_prefix()` - hash-chain walk | `match_prefix()` - tree traversal |
 | Load cached KV | Hash lookup per block | Walk path, collect KV |
 | Commit new KV | Hash + insert per block | Tree insert at divergence point |
 | Release locks | N/A | `unlock_radix_path()` |
 | Eviction | Flat LRU (any block) | Leaf-first LRU (structural) |
 
-The model, attention heads, `assemble_batch_cache`, and `disassemble_batch_cache` are completely unchanged — the model receives `past_kvs` the same way regardless of where they came from.
+The model, attention heads, `assemble_batch_cache`, and `disassemble_batch_cache` are completely unchanged - the model receives `past_kvs` the same way regardless of where they came from.
 
 ```python
-# In the decode loop — insertion happens when prefill completes
+# In the decode loop - insertion happens when prefill completes
 if prefill_req.is_fully_prefilled:
     insert_into_radix_tree(prefill_req, scheduler.radix_tree, scheduler.block_size)
     prefill_req.generated_tokens.append(idx_next.item())
@@ -346,14 +346,14 @@ RadixTree:
       [branch_7 suffix]
 ```
 
-The radix tree achieves 1.10x throughput over no caching — the only caching strategy that actually speeds things up. The flat cache is at 0.87x (slower than no caching).
+The radix tree achieves 1.10x throughput over no caching - the only caching strategy that actually speeds things up. The flat cache is at 0.87x (slower than no caching).
 
 ### Low reuse control
 
 With unique prompts (no shared prefixes), neither strategy can help. But the overhead difference is stark:
 
-- **Flat cache:** 0.87x (13% overhead) — still pays per-block hashing and insertion for all 48 blocks
-- **Radix tree:** 0.99x (1% overhead) — inserts one node per prompt with no hashing
+- **Flat cache:** 0.87x (13% overhead) - still pays per-block hashing and insertion for all 48 blocks
+- **Radix tree:** 0.99x (1% overhead) - inserts one node per prompt with no hashing
 
 ### Memory efficiency
 
@@ -393,13 +393,13 @@ A few sanity checks that confirm the tree is working correctly:
 
 ## Takeaways
 
-**Tree structure provides safety that flat maps cannot.** Under memory pressure, the radix tree's leaf-first eviction automatically protects shared interior nodes. The flat cache has no concept of "interior" vs "leaf" — it evicts any block, potentially orphaning entire chains.
+**Tree structure provides safety that flat maps cannot.** Under memory pressure, the radix tree's leaf-first eviction automatically protects shared interior nodes. The flat cache has no concept of "interior" vs "leaf" - it evicts any block, potentially orphaning entire chains.
 
 **Branching workloads are the sweet spot.** Multi-turn conversations, agent reasoning branches, and A/B prompt testing all create branching token sequences. The radix tree represents these naturally. The flat cache stores each branch as independent hash-chained blocks with no structural relationship.
 
 **Node splitting is the hardest implementation detail.** Getting the KV data division, parent/child re-wiring, and lock_ref inheritance right requires careful attention. Incorrect splitting produces silent data corruption that's hard to catch without equivalence tests.
 
-**This is the same approach used in production.** The radix tree is the data structure behind SGLang's RadixAttention. Multi-turn chat, agent workflows, RAG with shared document prefixes, batch inference with shared instruction templates — all benefit from making prefix sharing structurally explicit.
+**This is the same approach used in production.** The radix tree is the data structure behind SGLang's RadixAttention. Multi-turn chat, agent workflows, RAG with shared document prefixes, batch inference with shared instruction templates - all benefit from making prefix sharing structurally explicit.
 
 You can find the full source code here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-radix-tree-.py](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt-radix-tree-.py)
 

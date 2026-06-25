@@ -71,7 +71,7 @@ To test, I launched a query in my Antigravity IDE's sidebar agent console to Cla
 Claude's response was to do the following:
 
 - Edit `log.md` to include the query and response in the history
-- Create a new file called `Ideal Pipeline — Violin Coaching Agent.md` with the answer content
+- Create a new file called `Ideal Pipeline - Violin Coaching Agent.md` with the answer content
 - Edit `wiki-index.json` to include the new page
 
 Honestly, I was quite surprised that it was smart enough to create the new file, add that to my knowledge base, and then update the index. I didn't even have to prompt it to do so! The answer content itself drew from 6 sources that I had previously curated and correctly displayed the code, along with all explanations in an easy to read format. 

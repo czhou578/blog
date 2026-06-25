@@ -19,7 +19,7 @@ In a real server, if a very long low priority batch job arrives first and hogs t
 
 Having a scheduler can preempt the low-priority job, serve the high-priority one immediately, and resume the evicted request when resources free up. This is exactly how vLLM's scheduler manages competing requests under memory pressure.
 
-Here's the request lifecycle with scheduling. The key addition compared to our chunked prefill post is the preemption arrow — an active request can be evicted back to waiting if the system runs out of KV memory:
+Here's the request lifecycle with scheduling. The key addition compared to our chunked prefill post is the preemption arrow - an active request can be evicted back to waiting if the system runs out of KV memory:
 
 <div class="mermaid">
 stateDiagram-v2
@@ -50,7 +50,7 @@ class Request:
 
 We need a data structure that would make ordering by (priority, arrival_time) efficient. Let's hope your Leetcoding skills are sharp, because we're going to need to use a **min-heap**!
 
-Here is a question for you: When two requests have the same priority, which should be served first — the one that arrived earlier or the one with fewer tokens left?
+Here is a question for you: When two requests have the same priority, which should be served first - the one that arrived earlier or the one with fewer tokens left?
 
 ## Scheduler Class
 
@@ -65,8 +65,8 @@ Here is the `schedule` function:
     def schedule(self, step: int):
         """
         Returns:
-            prefill_req:  Request | None  — one request getting a prefill chunk (or None)
-            decode_reqs:  List[Request]   — all requests currently being decoded (active)
+            prefill_req:  Request | None  - one request getting a prefill chunk (or None)
+            decode_reqs:  List[Request]   - all requests currently being decoded (active)
 
         """
         self._maybe_admit(step)       # promote waiting → prefilling if memory allows
@@ -122,7 +122,7 @@ And here are the two helper methods that do the heavy lifting:
             heapq.heappush(self.waiting, (key, victim))
 ```
 
-`_maybe_admit` is the gatekeeper: it decides whether a new request can enter the system. It peeks at the highest-priority candidate in the waiting heap and checks two constraints before letting it through — first, whether the total KV memory currently consumed by active and prefilling requests, plus the candidate's full prompt length, would exceed `max_kv_tokens`, and second, whether the batch is already at capacity. If either constraint fails, the candidate stays in the heap and we try again next step. Notice the early return when `self.prefilling` is non-empty — we only allow one request to be mid-prefill at a time (matching our chunked prefill design), so a new request can't be admitted until the current one finishes prefilling and graduates to active.
+`_maybe_admit` is the gatekeeper: it decides whether a new request can enter the system. It peeks at the highest-priority candidate in the waiting heap and checks two constraints before letting it through - first, whether the total KV memory currently consumed by active and prefilling requests, plus the candidate's full prompt length, would exceed `max_kv_tokens`, and second, whether the batch is already at capacity. If either constraint fails, the candidate stays in the heap and we try again next step. Notice the early return when `self.prefilling` is non-empty - we only allow one request to be mid-prefill at a time (matching our chunked prefill design), so a new request can't be admitted until the current one finishes prefilling and graduates to active.
 
 ### When to Preempt
 
@@ -139,7 +139,7 @@ When the memory frees up again, the preempted request re-enters the waiting queu
 
 Question to ask yourself: Should preempted requests go to the front of the waiting queue (preserving their original priority) or to the back?
 
-Here's a concrete example. Two requests share a tight KV budget of 22 tokens. Request A (low priority) is actively decoding, Request B (high priority) arrives and needs prefilling. As B prefills and both caches grow, the system hits the memory limit — so the scheduler preempts A, clears its cache, and lets B finish. Once B completes and frees its memory, A re-enters and re-prefills from scratch:
+Here's a concrete example. Two requests share a tight KV budget of 22 tokens. Request A (low priority) is actively decoding, Request B (high priority) arrives and needs prefilling. As B prefills and both caches grow, the system hits the memory limit - so the scheduler preempts A, clears its cache, and lets B finish. Once B completes and frees its memory, A re-enters and re-prefills from scratch:
 
 <div class="mermaid">
 sequenceDiagram
@@ -192,7 +192,7 @@ sequenceDiagram
     end
 </div>
 
-`_maybe_preempt` is the safety valve that fires when the system is *already* over budget — something `_maybe_admit` tries to prevent, but can't always guarantee because active requests grow their KV caches by one token every decode step. It loops until memory usage drops below `max_kv_tokens`, each iteration picking the worst victim: the request with the highest priority number (lowest importance) and, among ties, the one that arrived most recently. The victim's KV cache is cleared, its `prefill_cursor` is reset to zero, and it's pushed back into the waiting heap — meaning it will have to re-prefill from scratch when it's eventually re-admitted. This is the **recompute preemption** strategy: we trade future GPU work (re-prefilling) for immediate memory relief.
+`_maybe_preempt` is the safety valve that fires when the system is *already* over budget - something `_maybe_admit` tries to prevent, but can't always guarantee because active requests grow their KV caches by one token every decode step. It loops until memory usage drops below `max_kv_tokens`, each iteration picking the worst victim: the request with the highest priority number (lowest importance) and, among ties, the one that arrived most recently. The victim's KV cache is cleared, its `prefill_cursor` is reset to zero, and it's pushed back into the waiting heap - meaning it will have to re-prefill from scratch when it's eventually re-admitted. This is the **recompute preemption** strategy: we trade future GPU work (re-prefilling) for immediate memory relief.
 
 Together, these two functions enforce the core invariant of the scheduler: the system never exceeds its KV memory budget for more than a single step. `_maybe_admit` prevents overcommitment on the way in; `_maybe_preempt` corrects it if the system drifts over budget due to ongoing decode growth. Without `_maybe_admit`, we'd blindly admit requests and constantly trigger expensive preemptions. Without `_maybe_preempt`, a slow accumulation of decode tokens across many active requests could silently blow past the memory limit and crash the system.
 
@@ -336,7 +336,7 @@ In this case, all requests have the same priority. Verify they complete in arriv
 ```python
 
 # ══════════════════════════════════════════════════════════════
-# Test 1: FCFS — same priority, all complete, valid output
+# Test 1: FCFS - same priority, all complete, valid output
 # ══════════════════════════════════════════════════════════════
 print("=" * 60)
 print("Test 1: FCFS correctness")
@@ -378,7 +378,7 @@ One low-priority long request + one high-priority short request. Verify the shor
 ```python
 
 # ══════════════════════════════════════════════════════════════
-# Test 2: Same requests under FCFS vs Priority — admission order flips
+# Test 2: Same requests under FCFS vs Priority - admission order flips
 # ══════════════════════════════════════════════════════════════
 print("=" * 60)
 print("Test 2: Priority jumping the queue")
@@ -409,7 +409,7 @@ for req in fcfs_reqs + prio_reqs:
 # Check step logs above:
 #   FCFS     → [step 0] prefill=0  (req 0 admitted first, long prompt hogs budget)
 #   Priority → [step 0] prefill=1  (req 1 jumps queue despite arriving at same time)
-print("\n✅ Test 2 passed — verify from logs: FCFS admits req 0 first, Priority admits req 1 first")
+print("\n✅ Test 2 passed - verify from logs: FCFS admits req 0 first, Priority admits req 1 first")
 
 ```
 
@@ -424,7 +424,7 @@ Test 2: Priority jumping the queue
 
 ── Priority run ──
 
-✅ Test 2 passed — verify from logs: FCFS admits req 0 first, Priority admits req 1 first
+✅ Test 2 passed - verify from logs: FCFS admits req 0 first, Priority admits req 1 first
 ```
 
 From this result, we can see that the FCFS policy admits req 0 first, while the Priority policy admits req 1 first. This is because the Priority policy prioritizes requests with lower priority values, and in this case, req 1 has a lower priority value than req 0.
@@ -456,7 +456,7 @@ s = scheduled_generate(model, reqs, policy="priority", token_budget=16, max_kv_t
 
 # Preemption must have fired
 preempted_ids = [r.id for r in s.preempted]
-assert len(s.preempted) > 0, "❌ No preemption occurred — lower max_kv_tokens"
+assert len(s.preempted) > 0, "❌ No preemption occurred - lower max_kv_tokens"
 assert 0 in preempted_ids, f"❌ Expected req 0 (low priority) to be preempted, got {preempted_ids}"
 
 # Both requests still finish
@@ -512,7 +512,7 @@ assert req0.num_generated == req0.max_new_tokens
 
 # KEY CHECK: KV cache length must equal prompt + generated tokens.
 # If generated_tokens wasn't reset on preemption, old tokens have no KV backing
-# and this assertion will fail — exposing the bug.
+# and this assertion will fail - exposing the bug.
 expected_kv_len = len(req0.prompt_tokens) + req0.num_generated - 1
 actual_kv_len = req0.kv_cache[(0, 0)][0].shape[1]
 assert actual_kv_len == expected_kv_len, \
@@ -699,7 +699,7 @@ AssertionError                            Traceback (most recent call last)
 AssertionError: ❌ KV cache has 18 entries, expected 20. Hint: generated_tokens should be reset to [] on preemption
 
 ```
-In order to fix this, we need to reset `generated_tokens` to an empty list when a request is preempted. When `_maybe_preempt` clears the KV cache and resets `prefill_cursor`, the old generated tokens still linger — but after re-prefill, those orphaned tokens have no KV backing, creating the 2-entry mismatch. Adding `victim.generated_tokens = []` right after `victim.prefill_cursor = 0` in `_maybe_preempt` fixes the core bug. After that fix, the assertion is still off by 1 because the last generated token is sampled from logits but never fed back to the model, so the KV cache is always 1 shorter than the full sequence. The correct expected length is `len(req0.prompt_tokens) + req0.num_generated - 1`.
+In order to fix this, we need to reset `generated_tokens` to an empty list when a request is preempted. When `_maybe_preempt` clears the KV cache and resets `prefill_cursor`, the old generated tokens still linger - but after re-prefill, those orphaned tokens have no KV backing, creating the 2-entry mismatch. Adding `victim.generated_tokens = []` right after `victim.prefill_cursor = 0` in `_maybe_preempt` fixes the core bug. After that fix, the assertion is still off by 1 because the last generated token is sampled from logits but never fed back to the model, so the KV cache is always 1 shorter than the full sequence. The correct expected length is `len(req0.prompt_tokens) + req0.num_generated - 1`.
 
 The full code can be found here: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_scheduling.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_scheduling.ipynb)
 

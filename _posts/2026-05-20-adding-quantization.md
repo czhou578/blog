@@ -28,7 +28,7 @@ FP32 means that we have 32 bits to store a number, a bit meaning either a 0 or a
 More specifically, FP32 uses 1 bit for the sign, 8 bits for the exponent, and 23 bits for the significand. Other variants like FP16 or INT8 use less bits to store the same number, but with less precision. 
 
 1 Sign bit (positive/negative)
-Exponent bits (determines the scale/magnitude — like "how big" the number is)
+Exponent bits (determines the scale/magnitude - like "how big" the number is)
 Mantissa (or significand) bits (the actual precision digits after the leading 1)
 
 ![alt text]({{ site.baseurl }}/images/mantissa.png)
@@ -135,7 +135,7 @@ print(decode(out[0].tolist()))  # Should still be Shakespeare-ish
 
 Let's walk through this step by step.
 
-**Deep copy to CPU.** `copy.deepcopy(model).cpu()` creates an independent clone of the model and moves it to CPU. Dynamic quantization in PyTorch's eager mode only supports CPU — the quantized INT8 kernels don't have CUDA implementations. We call `.eval()` to disable dropout and set batch norm to inference mode.
+**Deep copy to CPU.** `copy.deepcopy(model).cpu()` creates an independent clone of the model and moves it to CPU. Dynamic quantization in PyTorch's eager mode only supports CPU - the quantized INT8 kernels don't have CUDA implementations. We call `.eval()` to disable dropout and set batch norm to inference mode.
 
 **Verify device placement.** A quick sanity check that all parameters actually landed on CPU. If any tensor is still on CUDA, the quantization call below will silently produce wrong results or crash.
 
@@ -164,9 +164,9 @@ Every invocation, it does the following in order for the activations:
 4. Perform the quantized matrix multiplication (int8 GEMM).
 5. Dequantize the result back to floating point (so the next layer can use it).
 
-**Inspect a quantized layer.** We print the first attention projection layer to confirm it's now a `DynamicQuantizedLinear`, and verify the weight dtype is `torch.qint8` — each weight value is stored as an 8-bit integer instead of a 32-bit float, a 4× memory reduction per parameter.
+**Inspect a quantized layer.** We print the first attention projection layer to confirm it's now a `DynamicQuantizedLinear`, and verify the weight dtype is `torch.qint8` - each weight value is stored as an 8-bit integer instead of a 32-bit float, a 4× memory reduction per parameter.
 
-**Benchmark.** We create a CPU context tensor and measure latency and model size. Note that `model_size_mb` may undercount the savings — PyTorch stores quantized weights as packed INT8 tensors, but `p.element_size()` might report the unpacked size depending on the version.
+**Benchmark.** We create a CPU context tensor and measure latency and model size. Note that `model_size_mb` may undercount the savings - PyTorch stores quantized weights as packed INT8 tensors, but `p.element_size()` might report the unpacked size depending on the version.
 
 **Generate text.** Finally, we seed the RNG and generate 100 tokens to verify the quantized model still produces coherent Shakespeare. The output won't be identical to FP32 (quantization introduces small rounding errors), but it should be recognizably similar in quality.
 
@@ -195,7 +195,7 @@ Sed maks of qure of the maid thegnly so,
 
 3 takeaways:
 
-- The model shrank from 0.84 MB → 0.03 MB — a ~28× reduction. This makes sense: INT8 weights are 4× smaller than FP32, and PyTorch's packed storage format compresses further.
+- The model shrank from 0.84 MB → 0.03 MB - a ~28× reduction. This makes sense: INT8 weights are 4× smaller than FP32, and PyTorch's packed storage format compresses further.
 - 1292 ms → 1877 ms, about 45% slower. This is counterintuitive but expected for a tiny model like NanoGPT (210k params). Dynamic quantization adds overhead per forward pass (computing activation min/max, quantizing inputs, dequantizing outputs), and for a model this small, that overhead dominates any benefit from cheaper INT8 matmuls.
 - The generated text ("KING LIf madam: That is chard's to say...") is still recognizably Shakespeare-style, so the INT8 rounding errors didn't destroy the model's capabilities.
 
@@ -262,7 +262,7 @@ print("Prepared for calibration (observers inserted)")
 
 Let's break this down step by step.
 
-**The problem.** PyTorch's static quantization needs `QuantStub` and `DeQuantStub` markers to know where to convert between float and INT8. If you place them at the model level (wrapping the entire forward pass), the attention `bmm` operation breaks — there's no `QuantizedCPU` kernel for batched matrix multiplication. FX graph mode doesn't work either because our `Head.forward()` has data-dependent control flow (the `if past_kvs` branch). The fix is to wrap each Linear layer individually so quantization happens at the boundary of each matmul, while attention stays in float.
+**The problem.** PyTorch's static quantization needs `QuantStub` and `DeQuantStub` markers to know where to convert between float and INT8. If you place them at the model level (wrapping the entire forward pass), the attention `bmm` operation breaks - there's no `QuantizedCPU` kernel for batched matrix multiplication. FX graph mode doesn't work either because our `Head.forward()` has data-dependent control flow (the `if past_kvs` branch). The fix is to wrap each Linear layer individually so quantization happens at the boundary of each matmul, while attention stays in float.
 
 **`QuantWrapper`.** This is a thin `nn.Module` that sandwiches any layer between a `QuantStub` and `DeQuantStub`. On the forward pass, the float input gets quantized to INT8, passes through the wrapped module's INT8 kernel, and the output gets dequantized back to float. This means each wrapped Linear does `float → int8 → matmul → int8 → float`, while everything between (like attention's `bmm`) stays in float.
 
@@ -283,11 +283,11 @@ graph LR
     style E fill:#bfdbfe,stroke:#3b82f6,color:#000
 </div>
 
-**Deep copy and disable model-level stubs.** We deep copy the model to CPU (static quantization only works on CPU in eager mode) and replace the model-level `QuantStub`/`DeQuantStub` with `nn.Identity()` — since we're doing per-layer wrapping instead.
+**Deep copy and disable model-level stubs.** We deep copy the model to CPU (static quantization only works on CPU in eager mode) and replace the model-level `QuantStub`/`DeQuantStub` with `nn.Identity()` - since we're doing per-layer wrapping instead.
 
 **Fuse Linear + ReLU.** For each transformer block, we fuse `net[0]` (Linear) and `net[1]` (ReLU) in the feedforward network into a single `LinearReLU` module. Fusing lets the quantized kernel apply ReLU directly on the INT8 output without an intermediate dequantize-requantize round trip, which is both faster and more accurate.
 
-**Set qconfig.** We grab the default quantization config for the `fbgemm` backend (Intel x86 optimized INT8 kernels). Setting `model_sq.qconfig = None` means nothing is quantized by default — we'll opt in layer by layer.
+**Set qconfig.** We grab the default quantization config for the `fbgemm` backend (Intel x86 optimized INT8 kernels). Setting `model_sq.qconfig = None` means nothing is quantized by default - we'll opt in layer by layer.
 
 **Wrap every Linear.** For each transformer block, we wrap the feedforward layers (`net[0]` the fused LinearReLU, `net[2]` the second Linear), the attention output projection (`sa.proj`), and each head's key, query, and value projections. Each wrapped module gets assigned the `qcfg` so PyTorch knows it should be quantized. The final `lm_head` (the output projection from hidden dim to vocabulary size) is also wrapped.
 
@@ -323,7 +323,7 @@ print(f"SQ INT8 | size: {sq_mb:.2f} MB | latency: {sq_ms:.1f} ms")
 
 **Verify.** We print the first attention projection layer to confirm it's now a `QuantizedLinear` with computed scale and zero-point. The `qscheme=torch.per_channel_affine` indicates per-channel quantization (different scale/zero-point per output channel), which is more accurate than per-tensor.
 
-**Benchmark.** We measure latency and size again. You'll notice the size is identical to dynamic quantization (0.03 MB) — both use INT8 weights. The latency, however, is now ~2353 ms, slower than dynamic quantization's ~1877 ms. This slowdown isn't from the calibration phase, but rather the per-layer `QuantWrapper` overhead during inference (converting back and forth between float and INT8 at every layer), which dominates the execution time for very small models.
+**Benchmark.** We measure latency and size again. You'll notice the size is identical to dynamic quantization (0.03 MB) - both use INT8 weights. The latency, however, is now ~2353 ms, slower than dynamic quantization's ~1877 ms. This slowdown isn't from the calibration phase, but rather the per-layer `QuantWrapper` overhead during inference (converting back and forth between float and INT8 at every layer), which dominates the execution time for very small models.
 
 Here is the result:
 
@@ -342,9 +342,9 @@ SQ INT8 | size: 0.03 MB | latency: 2353.2 ms
 
 ```
 
-The result confirms the conversion worked — the projection layer is now a `QuantizedLinear` with `per_channel_affine` quantization, meaning each of the 64 output channels has its own scale and zero-point (the printed `scale=0.0119, zero_point=65` are for one representative channel). This is more precise than dynamic quantization's `per_tensor_affine` scheme, where a single scale covers the entire weight matrix — per-channel avoids the problem where one outlier channel forces a wide range that wastes precision for all the others.
+The result confirms the conversion worked - the projection layer is now a `QuantizedLinear` with `per_channel_affine` quantization, meaning each of the 64 output channels has its own scale and zero-point (the printed `scale=0.0119, zero_point=65` are for one representative channel). This is more precise than dynamic quantization's `per_tensor_affine` scheme, where a single scale covers the entire weight matrix - per-channel avoids the problem where one outlier channel forces a wide range that wastes precision for all the others.
 
-The size is identical to dynamic quantization at 0.03 MB — both approaches store INT8 weights, so the compression ratio is the same. The latency, however, is the worst of all three approaches at 2353 ms (FP32: 1292 ms, dynamic: 1877 ms). This is the cost of our `QuantWrapper` approach: every wrapped Linear performs a `float → quantize → int8_matmul → dequantize → float` round trip, and with 6 wrapped layers per transformer block (K, Q, V, proj, two FFN linears) plus `lm_head`, that's a lot of quantize/dequantize overhead for a model where the actual matmuls take microseconds. In production systems with large models, this overhead is negligible compared to the massive INT8 matmul savings — but for our 210k-parameter NanoGPT, it dominates.
+The size is identical to dynamic quantization at 0.03 MB - both approaches store INT8 weights, so the compression ratio is the same. The latency, however, is the worst of all three approaches at 2353 ms (FP32: 1292 ms, dynamic: 1877 ms). This is the cost of our `QuantWrapper` approach: every wrapped Linear performs a `float → quantize → int8_matmul → dequantize → float` round trip, and with 6 wrapped layers per transformer block (K, Q, V, proj, two FFN linears) plus `lm_head`, that's a lot of quantize/dequantize overhead for a model where the actual matmuls take microseconds. In production systems with large models, this overhead is negligible compared to the massive INT8 matmul savings - but for our 210k-parameter NanoGPT, it dominates.
 
 Here is the final comparison:
 
@@ -356,9 +356,9 @@ Dynamic INT8               0.03         1877.0      0.69x
 Static INT8                0.03         2353.2      0.55x
 ```
 
-We can see that both quantization methods achieve a massive **28× memory reduction** (0.84 MB → 0.03 MB), but neither delivers a speed improvement — in fact, both are *slower* than the FP32 baseline. This is the key lesson: quantization's latency benefit comes from replacing expensive FP32 matrix multiplications with cheaper INT8 ones, but our NanoGPT model has only 210k parameters, so the matmuls themselves take microseconds. The fixed overhead of quantization (computing scales, packing/unpacking INT8 tensors, dequantizing outputs) dwarfs those microsecond matmuls, resulting in a net slowdown.
+We can see that both quantization methods achieve a massive **28× memory reduction** (0.84 MB → 0.03 MB), but neither delivers a speed improvement - in fact, both are *slower* than the FP32 baseline. This is the key lesson: quantization's latency benefit comes from replacing expensive FP32 matrix multiplications with cheaper INT8 ones, but our NanoGPT model has only 210k parameters, so the matmuls themselves take microseconds. The fixed overhead of quantization (computing scales, packing/unpacking INT8 tensors, dequantizing outputs) dwarfs those microsecond matmuls, resulting in a net slowdown.
 
-Dynamic quantization (0.69×) beats static (0.55×) on latency because it has less per-layer overhead — there's no `QuantStub`/`DeQuantStub` wrapper around every Linear, just a single `quantize_dynamic` call that swaps in optimized `DynamicQuantizedLinear` modules. Static quantization pays for higher accuracy (per-channel scales from calibration) with more conversion overhead at every layer boundary.
+Dynamic quantization (0.69×) beats static (0.55×) on latency because it has less per-layer overhead - there's no `QuantStub`/`DeQuantStub` wrapper around every Linear, just a single `quantize_dynamic` call that swaps in optimized `DynamicQuantizedLinear` modules. Static quantization pays for higher accuracy (per-channel scales from calibration) with more conversion overhead at every layer boundary.
 
 In production, with models like LLaMA-70B where a single forward pass involves billions of multiply-accumulate operations, the INT8 compute savings overwhelm the fixed overhead and you'd see the expected 2-4× speedup. For our tiny model, the takeaway is simpler: **quantization is a memory optimization first**. If your goal is to fit a model into limited VRAM or ship a smaller binary, quantization delivers immediately. The speed benefit is a bonus that only kicks in at scale.
 
