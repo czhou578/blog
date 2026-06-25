@@ -19,7 +19,7 @@ The sampling step?
 You can't answer these questions with wall-clock numbers alone.
 You need per-operation, per-request timing data - and a way to see it.
 
-This post walks through an inference profiler we built for NanoGPT.
+This post walks through an inference profiler I built for NanoGPT.
 It has two halves: a Python instrumentation library that records timestamped spans during inference, and a React timeline viewer that renders them as an interactive flame chart.
 The data flows in one direction:
 
@@ -188,7 +188,7 @@ while not scheduler.is_done():
 ```
 
 Each scheduler step produces 5-7 spans.
-Over a typical 17-step run with 4 requests, this generates ~110 spans - enough to see the full pipeline behavior without being noisy.
+Over a typical 17-step run with 4 requests, this generates ~110 spans, enough to see the full pipeline behavior without being noisy.
 
 The categories are chosen to match the conceptual phases of inference:
 
