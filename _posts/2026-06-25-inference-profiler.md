@@ -1,7 +1,8 @@
 ---
 layout: post
 title: "NanoGPT: Inference Profiler"
-date: 2026-06-24
+date: 2026-06-25
+image: https://czhou578.github.io/blog/images/profiler_thumbnail.png
 ---
 
 # Building an Inference Profiler from Scratch
@@ -19,6 +20,8 @@ The sampling step?
 You can't answer these questions with wall-clock numbers alone.
 You need per-operation, per-request timing data - and a way to see it.
 
+![Inference Profiler]({{ site.baseurl }}/images/profiler_thumbnail.png)
+
 This post walks through an inference profiler I built for NanoGPT.
 It has two halves: a Python instrumentation library that records timestamped spans during inference, and a React timeline viewer that renders them as an interactive flame chart.
 The data flows in one direction:
@@ -31,6 +34,12 @@ Python instrumentation      JSON trace file       React timeline viewer
 │ context managers    │     │               │     │ Hover details        │
 └────────────────────┘     └───────────────┘     └──────────────────────┘
 ```
+
+Here is the profiler's output loaded in Perfetto, showing a 65ms trace of 4 concurrent requests through the interleaved engine.
+Each row is a swimlane: the `system` track shows `model_forward` spans (the transformer forward pass) dominating wall-clock time, while per-request tracks (`req_0` through `req_3`) show lifecycle events (diamond markers for admission, prefill completion, and request completion) and request-scoped operations like `commit_blocks` for prefix cache writes.
+The staggered admission pattern is visible - each request enters one step after the previous one, and the timeline makes it clear how much time each request spends waiting for other requests' prefill phases to complete.
+
+![Perfetto trace of 4 concurrent requests through the interleaved inference engine]({{ site.baseurl }}/images/profiler.png)
 
 ---
 
