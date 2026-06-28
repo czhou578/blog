@@ -37,6 +37,8 @@ Early exit:
 
 Easy tokens take the fast path, hard tokens take the full path, and on average, you save compute.
 
+![Early Exit Heads]({{ site.baseurl }}/images/early_exit_thumbnail.png)
+
 Let's build it.
 
 ---
@@ -191,6 +193,8 @@ Token "h":  needs all 4 layers
 ```
 
 If you just skip the remaining layers entirely, the next decode step will crash (or silently produce garbage because the cache lengths don't match).
+
+![KV cache backfill - remaining layers run to populate the cache even after early exit]({{ site.baseurl }}/images/early_exit_backfill.png)
 
 The solution we implemented is **backfill**: after deciding to exit, continue running the remaining blocks anyway, but only for their KV cache side effects.
 The prediction comes from the exit head; the deeper layers run solely to populate the cache:
