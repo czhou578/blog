@@ -6,7 +6,7 @@ date: 2026-05-11
 
 In a [previous post](/blog/2026/05/10/adding-kv-cache-to-nanogpt), I added a KV cache to NanoGPT - Karpathy's from-scratch GPT trained on Shakespeare. That let us avoid recomputing past keys and values, cutting decode from O(n²) to O(n) and giving us a moderate speedup in tokens per second. But we were still serving one request at a time. `B` in the batch dimension was always 1 during generation.
 
-A real inference server doesn't do that. It packs multiple requests into a single batch and lets them arrive and leave independently - some requests are still generating while new ones join and finished ones depart. This is called continuous batching, and in this post I'm going to build it from scratch on top of our toy model.
+A real inference server packs multiple requests into a single batch and lets them arrive and leave independently. This is called continuous batching, and in this post I'm going to build it from scratch on top of our toy model.
 
 The problem is straightforward: without batching, the GPU sits mostly idle. One request at a time means one row in the batch dimension, which is nowhere near enough to saturate the hardware. Worse, different requests have different sequence lengths, so naive static batching forces short requests to wait for long ones. Continuous batching solves both: requests flow in and out of the batch every decode step, and the GPU stays busy.
 
@@ -14,7 +14,7 @@ The problem is straightforward: without batching, the GPU sits mostly idle. One 
 
 The current `generate_with_cache` function has the KV cache baked into the `Head` class as a single tensor for the whole batch. That worked fine for one request, but now we need multiple requests with different sequence lengths sharing the same forward pass. **The cache has to move out of the model and into each request.**
 
-Each request carries the state it needs: the original prompt tokens, how many tokens it still wants to generate, and the tokens produced so far. The `status` field tracks its lifecycle - `"waiting"` means it hasn't been prefilled yet, `"active"` means it's in the decode batch, and `"done"` means it's finished. 
+Each request carries the state it needs: the original prompt tokens, how many tokens it still wants to generate, and the tokens produced so far. The `status` field tracks its lifecycle: `"waiting"` means it hasn't been prefilled yet, `"active"` means it's in the decode batch, and `"done"` means it's finished. 
 
 Each request owns its own KV cache: a dictionary keyed by `(layer_idx, head_idx)` holding the cached key and value tensors for that request's history.
 
@@ -53,11 +53,11 @@ class Request:
         self.kv_cache.clear()
 ```
 
-The old `Head.key_cache` had shape `(B, T, hs)` - one contiguous tensor for the whole batch. Now each request gets its own `(1, T_i, hs)` tensor, and `T_i` can differ across requests. The question becomes: how do you stitch these together for a batched forward pass when the sequence lengths don't match? We'll get to that.
+The old `Head.key_cache` had shape `(B, T, hs)`, which was one contiguous tensor for the whole batch. Now each request gets its own `(1, T_i, hs)` tensor, and `T_i` can differ across requests. The question becomes: how do you stitch these together for a batched forward pass when the sequence lengths don't match?
 
 ## Per-request generation
 
-Before tackling the full scheduler, it helps to build a simpler stepping stone: a function that generates for a single `Request` object, but with the cache living on the request instead of inside the model.
+Before tackling the full scheduler, it helps to build a simpler stepping stone: a function that generates for a single `Request` object, but with the cache living on the request.
 
 ```python
 # ── Per-Request generation ────────────────────────────────────────────────────
@@ -123,15 +123,15 @@ def generate_request(model, request: Request):
 
 **Prefill.** We convert the prompt into a tensor of shape `(1, T_prompt)` and run it through the model in one shot. The model returns logits and a fresh KV cache for every layer and head. We store that cache on the request object - keyed by `(layer_idx, head_idx)` - so the request now owns all the cached state it needs for future decode steps. Since we have multiple layers and each layer has multiple heads, that tuple is the natural index into the 16 separate K/V caches per request (4 layers × 4 heads in our model).
 
-**Decode loop.** Each iteration samples one token from the last position's logits, appends it to the request, then feeds just that single token back through the model along with the cached past. The position index `curr_pos` tells the model where this token sits in the full sequence - without it, the model would always use position 0 for every decode step, producing garbage because the positional embeddings would be wrong and the attention scores would be computed with corrupted signals.
+**Decode loop.** Each iteration samples one token from the last position's logits, appends it to the request, then feeds just that single token back through the model along with the cached past. The position index `curr_pos` tells the model where this token sits in the full sequence. Without it, the model would always use position 0 for every decode step, producing garbage because the positional embeddings would be wrong and the attention scores would be computed with corrupted signals.
 
 **Cache update.** After each forward pass, the model returns updated K/V tensors (the old cache with the new token's key and value concatenated). We write these back to the request, overwriting the old cache.
 
 ## Packing caches into a batch
 
-But there's a problem. Different requests have different KV cache lengths. Request A might have 50 cached positions while Request B has 15. The model expects a uniform tensor of shape `(B, T, hs)`, not a ragged list. We need to pack all the per-request caches into a single batch before the forward pass.
+Different requests have different KV cache lengths. Request A might have 50 cached positions while Request B has 15. The model expects a uniform tensor of shape `(B, T, hs)`. We need to pack all the per-request caches into a single batch before the forward pass.
 
-The solution is left-padding. We pad shorter caches with zeros on the left so they all match the length of the longest cache. New tokens always land at the right edge, so the padding stays inert on the left. During the forward pass, an attention mask tells the model to ignore the padding positions - they get filled with `-inf` before softmax, which drives their attention weight to zero.
+The solution is left-padding. We pad shorter caches with zeros on the left so they all match the length of the longest cache. New tokens always land at the right edge, so the padding stays inert on the left. During the forward pass, an attention mask tells the model to ignore the padding positions: they get filled with `-inf` before softmax, which drives their attention weight to zero.
 
 ```python
 
@@ -187,13 +187,13 @@ def assemble_batch_cache(requests):
 
 ```
 
-We want to access the KV cache of every layer and head for every request. Then, we want to pad the left side with zeroes using `torch.zeros`. Then, we iterate over every layer and head, and for each layer and head, we iterate over every request and append the key and value tensors to the `keys` and `values` lists. 
+We want to access the KV cache of every layer and head for every request. Then, we want to pad the left side with zeroes using `torch.zeros`. Then, we iterate over every layer and head and for each layer and head, we iterate over every request and append the key and value tensors to the `keys` and `values` lists. 
 
 Finally, we concatenate the `keys` and `values` lists to get the batched KV cache. The values that we return are the batched KV cache, the attention mask, and the pad lengths. The attention mask will be passed into the model as we will see later, and the pad_lengths will be used to disassemble the batch cache, which will be in the next section. 
 
 ## Unpacking after the forward pass
 
-After the model's forward pass, the KV cache comes back as one big batched tensor of shape `(B, T_max + 1, hs)` - the old cache plus the new token's entry. But that batched format still includes the left-padding we added during assembly. We need to strip it back out so each request gets only its own real history.
+After the model's forward pass, the KV cache comes back as one big batched tensor of shape `(B, T_max + 1, hs)` - the old cache plus the new token's entry. But we need to strip out the left-padding from the assembly step so each request gets only its own real history.
 
 ```python
 
@@ -213,15 +213,11 @@ def disassemble_batch_cache(requests, new_kvs, pad_lengths):
 
 ```
 
-After the model's forward pass, the KV cache comes back as one big batched tensor of shape (B, T_max + 1, hs) - but that batched format includes the left-padding we added during assembly, which is meaningless filler that doesn't belong to any request's real history. 
-
-The disassemble_batch_cache function reverses the assembly step by slicing each request's row out of the batch and stripping the left-padding using the saved pad_lengths, so each request gets back only its own real KV entries of shape (1, T_i + 1, hs). Without this step, the padding zeros would accumulate in each request's cache on every decode iteration, steadily corrupting attention scores and eventually causing the model to attend over garbage positions. In short, assemble_batch_cache packs requests together for an efficient batched forward pass, and disassemble_batch_cache unpacks them so each request's cache stays clean and correctly sized for the next step. 
-
-Now, we are ready to tackle the most difficult part of this, which is the actual continuous batching loop itself!
+Without this step, the padding zeros would accumulate in each request's cache on every decode iteration, steadily corrupting attention scores and eventually causing the model to attend over garbage positions. In short, assemble_batch_cache packs requests together for an efficient batched forward pass, and disassemble_batch_cache unpacks them so each request's cache stays clean and correctly sized for the next step. 
 
 ## Continuous Batching Loop
 
-The current loop runs a fixed number of steps for one request. The continuous batching loop looks more like:
+The current loop runs a fixed number of steps for one request. The continuous batching loop looks like:
 
 ```
 while there are active requests OR the waiting queue is non-empty:
@@ -435,7 +431,7 @@ She thout to He
 ✓ All requests completed with correct cache shapes!
 ```
 
-Request 0 finishes first at step 15, request 2 (which arrived late at step 3) finishes at step 16, and request 1 - which wanted the most tokens - finishes last at step 20. The batch size dynamically expands as new requests join mid-flight and shrinks as requests complete without disrupting the active decode loop. This is exactly the behavior we want.
+Request 0 finishes first at step 15, request 2 (which arrived late at step 3) finishes at step 16, and request 1 - which wanted the most tokens - finishes last at step 20. The batch size dynamically expands as new requests join mid-flight and shrinks as requests complete without disrupting the active decode loop. 
 
 The significance of these results lies in the passing assertions at the end. Despite the staggered arrivals, the differing prompt lengths, and the constant left-padding and unpacking occurring in every single forward pass, each request finishes with a perfectly sized, uncorrupted KV cache. This proves our continuous batching logic successfully isolates each request's state while still processing them efficiently in parallel on the GPU.
 
@@ -456,12 +452,6 @@ req.kv_cache[(2, 3)]  # Layer 2, Head 3 → different K/V
 Each value is a `(key_tensor, value_tensor)` tuple where both tensors have shape `(1, T, 16)` - one sequence, `T` cached positions, 16 dimensions per head.
 
 **Why build a `still_active` list instead of removing from `active_requests` directly?** Deleting items from a list while iterating over it is a classic Python bug. When you remove an item, the indices shift and the loop skips the next element. Building a fresh list avoids the problem entirely. Within the scheduler's `while` loop, `active_requests` acts as global state: at the start of each iteration you read who's in the batch, at the end you overwrite it with whoever's still going.
-
-## From here to production
-
-Between this toy implementation and a production system like vLLM, there's a long list of engineering that changes. Paged attention replaces our naive left-padding with a virtual memory system for the KV cache. Preemption policies handle what happens when memory gets tight and you need to evict a request mid-generation. Chunked prefill breaks long prompts into pieces so they don't starve decode requests. Speculative decoding generates multiple candidate tokens per step to reduce latency.
-
-None of these change the core loop. Admit requests, prefill them, decode in a shared batch, evict when done - that's exactly what we built here, just with 200 lines of Python instead of 200,000.
 
 You can find the entire code at this link: [https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_cont_batching.ipynb](https://github.com/czhou578/multimodal-inference-visualizer/blob/main/nanogpt_cont_batching.ipynb)
 
