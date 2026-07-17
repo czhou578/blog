@@ -70,7 +70,7 @@ Lily said, "We need to cut the box, Lily."
 
 It looked pretty good, but the story didn't make much sense, and there were end of text tokens sprinkled in here and there. Regardless, the model achieved a very low loss and was able to largely memorize the batch. 
 
-## Experiment 2: 
+## Experiment 2: Training on TinyStories Dataset
 
 For the next experiment, I wanted to see if I could train the model on a more larger dataset without truncating any number of tokens. I decided to use the TinyStories dataset in full, which is about 10 million tokens. 
 
@@ -98,11 +98,67 @@ metrics_log_file = 'metrics.jsonl' # structured, machine-parseable log (one JSON
 train_log_file = 'train_baseline.log' # human-readable log, mirrors stdout
 ```
 
-The final training run took about 4 hours, and it did come with a caveat*. The model was able to achieve a final loss of 0.24
+The final training run took about 4 hours, and it did come with a caveat*. The model was able to achieve a final loss of 0.24, and the loss generated looked like this:
 
-## Experiment 3
+The text result came back like 
 
-For the final experiment, I tested the model on the WikiText dataset, which contains about 
+```text
+
+"No, Tom, I'm sorry. You were so silly and foolish. You can't take away the vase. You have to help me! I'll give you a big hug. You're my sister!"
+Lila felt very relieved. She hugged Tom and Tom.
+"Thank you, Tom. You're my best friend. You're my best friend. You're my best friends. You comfort me."
+Tom smiled. He hugged Lila and Lila.
+Lila hugged them back. She was glad they were safe. She was happy.
+"I'm so glad you're okay, Lila. You're my best friends. You are more famous friends. You saved the vase and my love. You are very cool. You saved my heart and my heart. You are my best friends."
+They hugged them back. They said goodbye to their stories. They played with their toys, their books, and their smile. They were happy. They were famous twins. They had a friend. They loved them. They were happy.<|endoftext|>Once upon a time, there was a lazy dog named Max. He loved to lazy and sleep all day. One day, Max was very tired and wanted to sleep.
+Max's owner, a kind girl named She would give Max a warm bath. She would throw a soft blanket around Max's and hold it.
+After Max felt better, he was not lazy anymore. He went to the park and played with his friends. They had a great time playing together.
+The moral of the story is that if you try hard and stay lazy, or you might find a new friend.<|endoftext|>Once upon a time there was a little girl named Ann. She had a favourite dress, and she loved to bounce. One day, Ann decided to go on a sailing. She jumped up on her parents's shoulder and they began to spin around with a rhythm. Suddenly, Ann saw a sail by the sea. She wanted to find out what it was, so she decided to follow the sail. 
+Ann followed the sail for a long time, but she got closer and saw that it was actually a warning. She looked embarrassed, but she decided to stay and watch the sailboat instead. Suddenly, school panicked. Everything around her silently cheered. 
+Suddenly, a magical fairy appeared and told Ann that it was a magical sailingboat that Ann had not been seen in the sea, but she knew
+```
+
+The setences are more coherent and the story is tructured and kind of makes sense??! 
+
+## Experiment 3: Training on WikiText Dataset
+
+For the final experiment, I tested the model on the WikiText dataset, which contains about 103 million tokens. To prepare the data, I modified the `prepare.py` script to handle the larger dataset and split it into training, validation, and test sets. 
+
+![WikiText Loss]({{ site.baseurl }}/images/wikitext-loss.png)
+
+I achieved a final loss of about 3.49 after 2000 iterations. 
+
+The generation came out to this for the 1024 block size:
+
+```text
+
+<|endoftext|> Tōgō , under the tutelage of one of the most prominent Chinese characters in the series to a series written by the series . Although written by Tōgō , the story takes place over a period of four years . 
+<|endoftext|> Tōgō : Tōgō : The Story of Tōgō is a concept album for the series . The third installment , Tōgō : The Story of Tōgō , is a collaboration with series creator Yurok Miyagi , while Tōgō 's story is based on the series . The third installment , Tōgō : The Story of Tōgō , is the first to be written by Tōgō in which the character was originally shown . It was composed and produced by Tōgō . Each of the episodes to be played out of the series takes its name from the original to the original . The second installment , Tōgō : The Story of Tōgō : The Story of Tōgō , is the first to be written by Tōgō . The story of the series , however , is not considered to be an " modern romance " . The story of Tōgō is composed by Kazuichi Teng . The story arc is one of the most popular English @-@ language novels in Japan , reaching number 21 on the Sino @-@ Japanese language charts . 
+<|endoftext|> = = Plot = = 
+<|endoftext|> Tōgō : The Story of Tōgō : The Story of Tōgō is a story of the same name . In this story , the demon Zayō ( 杭 ; 毉绘 , " Oan " Tōgō ) is revealed to be from the series 's epigod , having been converted into a human form by the demon Zayō . The story follows Tōgō and the three other demons , a reincarnation of his tribe Tōgō , and a clan leader named Nōgō . The four men are identified as Nōgō 's clan and , in the story , are featured in the story . The story is set in the summer of the monthly evening . 
+<|endoftext|> The story of Tōgō is first presented in a different way ; the third installment was written by Zayō . The story is the only one in the story — the first one
+
+```
+
+I would say that it is far less impressive then the previous generations but with the 100 million token dataset, it would require more epochs of training in order to fully fi this to the correct distribution. I would say that the model is still learning and has not yet fully converged to the lowest possible loss.
+
+## Experiment 4: Training on Different Block Sizes
+
+My next experiment was to see how the block size affected the training and generation. I ran the same training on the WikiStories dataset with different block sizes: 512, 256, and 128 tokens. I kept the other hyperparameters the same and ran the training for 2000 iterations each time.
+
+Here are the final loss curves for each block size:
+
+512 tokens: [INFO] iter 2000: loss 3.6946, time 6978.68ms, mfu 12.22%, tok/s 9,391
+256 tokens: [INFO] iter 2000: loss 4.0265, time 6592.34ms, mfu 11.27%, tok/s 4,971
+128 tokens: [INFO] iter 2000: loss 4.5207, time 1829.06ms, mfu 10.49%, tok/s 8,958
+
+
+## Experiment 5: Training on Different Attention Mechanisms
+
+As the last experiment, I wanted to find out how different flash attention mechanisms would affect training and generation. I ran the same training on the 
+
+
+
 
 
 
