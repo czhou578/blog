@@ -68,29 +68,29 @@ If there is a new model that needs to be added, it is just one config file and r
 
 The following metrics need to be measured for our benchmark:
 
-First-token latency (TTFT) 
+#### First-token latency (TTFT) 
 
 - This is defined as the time between ```POST /generate ``` and ```first generated token```. We are going to use multiple prompt lengths from 32 to 16384 tokens. We want a final graph between prompt length and latency. This will reveal the KV-cache behavior. 
 
-Decode speed 
+#### Decode speed 
 
 - This is the easiest benchmark. We generate 512, 1024, and 2048 tokens, and record the average tok/sec, peak tok/sec, minimum tok/sec, median tok/sec. 
 
-Prompt processing speed
+#### Prompt processing speed
 
 - This is defined as ```Input tokens / prefill time``` to give tokens/sec. We will use prompt sizes of 128 to 32768 tokens, and graph the prompt size against the prefill throughput. 
 
-Reasoning token count 
+#### Reasoning token count
 
 - Many reasoning models generate thinking tokens along the lines of `<thinking> </thinking>`. We want to measure the ratio of these thinking tokens to the actual answer tokens. We will also want to measure the maximum, median, and the average thinking length. 
 
 This tells you whether newer models reason more efficiently.
 
-Memory usage
+#### Memory usage
 
 We record GPU memory, GPU utilization, temperature, and clocks from `nvidia-smi` every second, along with CPU RAM and swap usage. The data is stored as a CSV and then plotted as memory usage over time, giving us a continuous view of how the model and hardware interact during inference.
 
-Power consumption
+#### Power consumption
 
 We use `nvidia-smi --query-gpu=power.draw` every second to collect average watts, peak watts, energy (Wh), and energy per token. This is an underrated benchmark — a model producing 60 tok/sec at 120W is much more efficient than one producing 75 tok/sec at 300W. We want a way to measure how fast the models can respond with tokens while also measuring the backend performance and hardware utilization. Ideally, it will give us a bigger picture of how the hardware and software are coexisting together within this system. 
 
