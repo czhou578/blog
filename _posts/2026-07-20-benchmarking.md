@@ -216,6 +216,73 @@ Reasoning prompts: Six prompts split into three categories — baseline soft-rea
 Concurrency benchmark: Levels 1, 2, 4, 8, 16 with 5 requests each at 256 output tokens, temperature 0.
 The ready_timeout_s: 600 and monitor_interval_s: 1.0 are operational settings for engine readiness and GPU sampling.
 
+I ran this and the `summary.json` file showed the following results across all benchmark phases:
+
+#### Latency (TTFT) and Prefill Throughput
+
+| Prompt Length | Avg TTFT | Prefill Throughput |
+|---|---|---|
+| 32 tokens | 0.1470 s | 305.8 tok/s |
+| 128 tokens | 0.1514 s | 911.7 tok/s |
+| 512 tokens | 0.1942 s | 2,688.8 tok/s |
+| 2,048 tokens | 0.3853 s | 5,341.4 tok/s |
+| 8,192 tokens | 0.7660 s | 11,095.6 tok/s |
+| 16,384 tokens | 0.8937 s | 20,355.0 tok/s |
+
+TTFT scales sub-linearly with prompt length — a 512× increase in tokens (32 → 16,384) only produces a ~6× increase in latency (0.147 s → 0.894 s). This is excellent KV-cache behavior. Prefill throughput scales beautifully from 305 tok/s at 32 tokens to over 20,000 tok/s at 16,384, showing that the attention engine efficiently processes larger batches of prompt tokens. The tail latency at 8,192 and 16,384 tokens shows some variance (p99 of 1.26 s and 2.03 s respectively), suggesting occasional scheduling hiccups under heavy prefill loads.
+
+#### Decode Speed
+
+Across all output lengths, decode speed is remarkably consistent:
+
+- **512 output tokens:** 54.83 tok/s over 9.34 seconds
+- **1,024 output tokens:** 52.91 tok/s over 19.35 seconds
+- **2,048 output tokens:** 52.57 tok/s over 38.96 seconds
+
+The model maintains ~52–55 tok/s regardless of generation length, with no measurable degradation at longer outputs. This indicates the decode stage is purely memory-bandwidth-bound and scales linearly with token count.
+
+#### Reasoning Token Analysis
+
+The benchmark reveals interesting behavior across prompt types:
+
+| Prompt Type | Thinking Tokens | Answer Tokens | Ratio |
+|---|---|---|---|
+| Baseline (train speed) | 521 | 135 | 3.86× |
+| Baseline (sheep puzzle) | 564 | 164 | 3.44× |
+| `<antThinking>` trigger (train) | 495 | 74 | 6.69× |
+| `<antThinking>` trigger (sheep) | 317 | 34 | 9.32× |
+| Harder CoT (probability) | 963 | 0 | ∞ (token budget exhausted) |
+| Harder CoT (palindrome) | 977 | 0 | ∞ (token budget exhausted) |
+
+Baseline prompts produce 3–4× thinking-to-answer ratios. Adding explicit `<antThinking>` reasoning-mode tags inflates the ratio to 6–9× — the model spends proportionally much more on reasoning scaffolding than on the final answer. The harder multi-step problems (probability calculation, palindrome coding) exhaust the 1,024-token output budget before producing any answer tokens, suggesting these reasoning models need significantly more output tokens for complex tasks.
+
+#### Concurrency Scaling
+
+| Concurrency | Wall Time | Aggregate Throughput | Avg TTFT | Success Rate |
+|---|---|---|---|---|
+| 1 | 18.48 s | 69.3 tok/s | 0.168 s | 100% |
+| 2 | 11.98 s | 106.9 tok/s | 0.262 s | 100% |
+| 4 | 8.26 s | 155.0 tok/s | 0.316 s | 100% |
+| 8 | 5.63 s | 227.4 tok/s | 0.381 s | 100% |
+| 16 | 5.88 s | 217.8 tok/s | 0.373 s | 100% |
+
+Throughput scales near-linearly from 1 to 8 concurrent requests (69 → 227 tok/s), but plateaus at 16 concurrency where throughput actually drops slightly (227 → 217 tok/s) — the GPU is fully saturated. TTFT degrades gracefully from 0.168 s to 0.381 s (2.3× increase across 16× concurrency). All requests succeeded at every level, indicating the vLLM engine handles concurrent load without failures.
+
+#### GPU Power and Efficiency
+
+- **Average power draw:** 36.7 W
+- **Peak power draw:** 66.8 W
+- **Total energy consumed:** 2.09 Wh over 205 seconds of sampling
+- **Energy per token:** 0.000583 Wh/token
+
+The DGX Spark's GPU draws remarkably low power during inference — averaging only 36.7 W with brief peaks at 66.8 W. At ~53 tok/s and ~0.00058 Wh per token, this model is exceptionally energy-efficient, making it ideal for always-on or battery-conscious deployments.
+
+## Running Against Other Models
+
+I decided to run this against the other Qwen versions; the Nvidia released NVFP4 version and the Unsloth quantized NVFP4 version as well. 
+
+The full file to the results are here: 
+
 ## Running 3rd Party Benchmarks
 
 I initially planned to benchmark against HumanEval, Datacurve's DeepSWE and other 3rd party benchmark suites. But I eventually didn't do any of that for the following reasons:
