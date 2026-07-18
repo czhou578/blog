@@ -281,7 +281,23 @@ The DGX Spark's GPU draws remarkably low power during inference — averaging on
 
 I decided to run this against the other Qwen versions; the Nvidia released NVFP4 version and the Unsloth quantized NVFP4 version as well. 
 
-The full file to the results are here: 
+The full file to the results are [here](https://github.com/czhou578/model-benchmarks/blob/main/reports/benchmark_comparison_three_models.md).
+
+### Three-Model Comparison
+
+I extended the harness to compare three NVFP4-quantized Qwen3.6 models on the same DGX Spark: the NVIDIA official build, the Red Hat build, and the Unsloth quantized version. The full results are in [the benchmark report](https://github.com/czhou578/model-benchmarks/blob/main/reports/benchmark_comparison_three_models.md).
+
+**Decode speed.** NVIDIA's official build is the clear winner, delivering ~174 tok/s — more than 3× the ~52–55 tok/s that the Red Hat build achieves. Unsloth also trails at decode.
+
+**Latency and prefill.** Unsloth wins at short inputs with a 63 ms TTFT at 32 tokens. Red Hat matches NVIDIA's prefill efficiency at long prompts (~893 ms TTFT at 16K). Around 2K tokens, prefill metrics from all three models converge, reinforcing that prefill is not the bottleneck for sustained workloads.
+
+**Concurrency.** NVIDIA's build scales to ~350 tok/s at batch 8, roughly 2× the Red Hat build's ~155 tok/s at the same level. Unsloth's concurrency profile follows a similar pattern to its decode: competitive at low batch, falling behind under load.
+
+**Energy efficiency.** NVIDIA leads at 0.00033 Wh/token — notably better than the Red Hat build's 0.00058 Wh/token — reflecting its higher throughput on the same hardware.
+
+**Reasoning.** Here the data reveals a trade-off: NVIDIA's build, despite its raw speed, has a functional correctness gap in reasoning benchmarks, while Red Hat produces consistent, usable outputs. Unsloth is best reserved for low-latency, short-context tasks where fast responses matter more than depth.
+
+The TLDR is that no single build wins in every category — NVIDIA for speed, Red Hat for stability, Unsloth for short-context latency.
 
 ## Running 3rd Party Benchmarks
 
@@ -291,7 +307,8 @@ I initially planned to benchmark against HumanEval, Datacurve's DeepSWE and othe
 
 After trying to fix the issue with using Docker's buildx plugin that automatically rebuilds images in a any architecture, I abandoned the effort due to it increasing the cost of running all the benchmarks.
 
-2. HumanEval also didn't work since my Qwen model that I was testing wasn't able to adequately complete the testing suites without giving back nonsensical answers. 
+2. Humanity's Last Exam also didn't work since my Qwen model that I was testing wasn't able to adequately complete the testing suites without giving back nonsensical answers. I was running about 4 tests at one time (since the whole benchmarking suite takes about a day to run) and my model wouldn't give back 4 responses for the 4 prompts. I have yet to fully debug this and figure out why.
 
+Let me know how you are benchmarking local open source models! The entire repo can be found [here:](https://github.com/czhou578/model-benchmarks) 
 
-
+CZ
