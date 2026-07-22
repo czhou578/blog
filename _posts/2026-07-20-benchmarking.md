@@ -155,7 +155,7 @@ Beyond single-request benchmarks, we also need to understand how performance deg
 
 ### Running Results for Qwen RedHat.
 
-![Results]({{ site.baseurl }}/images/benchmark-1.png)
+![Results]({{ site.baseurl }}/images/benchmarks-1.png)
 
 
 I tried to run the entire test for the RedHat version of Qwen, which is my daily driver. I used the config file:
