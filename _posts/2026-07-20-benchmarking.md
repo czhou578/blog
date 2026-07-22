@@ -1,10 +1,10 @@
 ---
 layout: post
-title: "Developing my own Benchmark!"
+title: "Developing my own Benchmark! Part 1"
 date: 2026-07-20
 ---
 
-In this post, I would like to explain how I was able to create my own custom benchmark for personal open source model testing. It was a bunch of twists and turns in order to produce something comprehensive on both hardware and software wise. 
+In this post, I would like to explain how I was able to create my own custom benchmark for personal open source model testing.  This will be a multi-part series focused on my benchmarking journey. It was a bunch of twists and turns in order to produce something comprehensive on both hardware and software wise. 
 
 Since I got my DGX Spark, I've been downloading and trying out various open source models on my machine, but testing each one out of the box is time intensive and can waste a lot of time. My coding workflows are quite diverse and it can be difficult to accurately measure the true performance in terms of hardware utilization and decode speed from just blind testing. 
 
@@ -123,15 +123,15 @@ The heart of the benchmark suite is [`runner.py`](_posts/runner.py) — a Phase 
 
 **Environment fingerprinting.** Before any benchmark runs, the script snapshots the hardware and software environment — GPU name, driver version, CUDA version (via `nvcc --version`), and the installed versions of `torch` and `vllm`. This ensures every run is reproducible and comparable, since benchmark results are meaningless if the underlying software stack keeps changing.
 
-**Token counting and prompt construction.** The script uses `tiktoken` with the `cl100k_base` encoding as a fallback for token counting when the server doesn't return usage stats in its response. More importantly, it includes a clever `build_prompt_of_length()` function that constructs substantive, non-repetitive prompts at any target token length — instead of repeating a pangram (which causes models to produce meta-commentary and hit a ~500-token wall), it weaves together multiple creative-writing blocks about an ancient underwater civilization, each block adding distinct details about their technology, culture, and eventual decline.
+**Token counting and prompt construction.** The script uses `tiktoken` with the `cl100k_base` encoding as a fallback for token counting when the server doesn't return usage stats in its response. More importantly, it includes a clever `build_prompt_of_length()` function that constructs substantive, non-repetitive prompts at any target token length. Instead of repeating a pangram (which causes models to produce meta-commentary and hit a ~500-token wall), it weaves together multiple creative-writing blocks about various topics. 
 
-**GPU Resource Monitor.** A background thread samples GPU memory usage and power draw at 1 Hz using `nvidia-smi`. Every sample is stored as a row in a CSV file for later plotting. When the benchmark finishes, it computes summary statistics: average and peak GPU power (watts), average and peak memory usage (MiB), and total energy consumption (watt-hours). This gives us a continuous view of how the model and hardware interact during inference, not just a single snapshot.
+**GPU Resource Monitor.** A background thread samples GPU memory usage and power draw at 1 Hz using `nvidia-smi`. Every sample is stored as a row in a CSV file for later plotting. When the benchmark finishes, it computes summary statistics: average and peak GPU power (watts), average and peak memory usage (MiB), and total energy consumption (watt-hours). This gives us a continuous view of how the model and hardware interact during inference. 
 
-**Model Client.** The `ModelClient` class implements an OpenAI-compatible streaming client that handles both chat and completions endpoints. Its `wait_until_ready()` method performs a two-step readiness check: first it polls `/v1/models` until the HTTP server accepts connections, then it drives a real test request to confirm the model engine has actually loaded its weights from disk — this second step is critical because the server can be listening long before the model is ready to process requests. Without it, latency sweeps would fire against a still-initializing engine and every TTFT measurement would show `n=0`.
+**Model Client.** The `ModelClient` class implements an OpenAI-compatible streaming client that handles both chat and completions endpoints. Its `wait_until_ready()` method performs a two-step readiness check: first it polls `/v1/models` until the HTTP server accepts connections, then it drives a real test request to confirm the model engine has actually loaded its weights from disk. This second step is critical because the server can be listening long before the model is ready to process requests. Otherwise, latency sweeps would fire against a still-initializing engine and every TTFT measurement would show `n=0`.
 
-The `generate()` method streams tokens and tracks several things simultaneously: time-to-first-token (TTFT), per-token time gaps, and — crucially — it accumulates reasoning tokens and answer tokens separately by inspecting `delta.reasoning` and `delta.content` in the streaming response. This split enables accurate reasoning-token analysis for models like Qwen3 that emit thinking tokens before their final answer.
+The `generate()` method streams tokens and tracks several things simultaneously: time-to-first-token (TTFT), per-token time gaps, and accumulates reasoning tokens and answer tokens separately by inspecting `delta.reasoning` and `delta.content` in the streaming response (very important!). This split enables accurate reasoning-token analysis for models like Qwen3 that emit thinking tokens before their final answer.
 
-**Latency sweep.** The `run_latency_sweep()` function measures TTFT across multiple prompt lengths (configurable, defaulting from 32 to 16384 tokens), repeating each measurement multiple times to account for variance. For each prompt length, it records average, median, p95, and p99 TTFT, plus prefill throughput (prompt tokens divided by prefill time). This produces the data for a KV-cache behavior graph — showing how prompt length affects first-token latency.
+**Latency sweep.** The `run_latency_sweep()` function measures TTFT across multiple prompt lengths (configurable, defaulting from 32 to 16384 tokens), repeating each measurement multiple times to account for variance. For each prompt length, it records average, median, p95, and p99 TTFT, plus prefill throughput (prompt tokens divided by prefill time). This produces the data for a KV-cache behavior graph, showing how prompt length affects first-token latency.
 
 **Decode speed benchmark.** `run_decode_speed()` generates 512, 1024, and 2048 tokens from a fixed-length prompt and records average, peak, minimum, and median token-per-second rates. It also analyzes the reasoning-to-answer token ratio by using the pre-split reasoning/answer text from the streaming response (for models that support it natively) or falling back to a heuristic parser that handles three formats: Qwen3-style `<antThinking>` XML tags, Anthropic-style `<thinking>` tags, and plain-text reasoning markers like "let me think" or "step by step".
 
@@ -154,6 +154,9 @@ Beyond single-request benchmarks, we also need to understand how performance deg
 **Integration with the core runner.** `concurrency.py` is imported lazily by `core_runner.py` inside the main orchestration loop (via `from benchmarks.concurrency import run_concurrency_test`). The lazy import ensures the concurrency module is only loaded when the user hasn't passed `--skip-concurrency`. Its results are saved to a `concurrency.json` file alongside the latency, decode, and reasoning results, giving a complete picture of serving scalability for each model tested.
 
 ### Running Results for Qwen RedHat.
+
+![Results]({{ site.baseurl }}/images/benchmark-1.png)
+
 
 I tried to run the entire test for the RedHat version of Qwen, which is my daily driver. I used the config file:
 
@@ -254,7 +257,7 @@ The benchmark reveals interesting behavior across prompt types:
 | Harder CoT (probability) | 963 | 0 | ∞ (token budget exhausted) |
 | Harder CoT (palindrome) | 977 | 0 | ∞ (token budget exhausted) |
 
-Baseline prompts produce 3–4× thinking-to-answer ratios. Adding explicit `<antThinking>` reasoning-mode tags inflates the ratio to 6–9× — the model spends proportionally much more on reasoning scaffolding than on the final answer. The harder multi-step problems (probability calculation, palindrome coding) exhaust the 1,024-token output budget before producing any answer tokens, suggesting these reasoning models need significantly more output tokens for complex tasks.
+Baseline prompts produce 3–4× thinking-to-answer ratios. Adding explicit `<antThinking>` reasoning-mode tags inflates the ratio to 6–9×. The model spends proportionally much more on reasoning scaffolding than on the final answer. The harder multi-step problems (probability calculation, palindrome coding) exhaust the 1,024-token output budget before producing any answer tokens, suggesting these reasoning models need significantly more output tokens for complex tasks.
 
 #### Concurrency Scaling
 
@@ -275,7 +278,7 @@ Throughput scales near-linearly from 1 to 8 concurrent requests (69 → 227 tok/
 - **Total energy consumed:** 2.09 Wh over 205 seconds of sampling
 - **Energy per token:** 0.000583 Wh/token
 
-The DGX Spark's GPU draws remarkably low power during inference — averaging only 36.7 W with brief peaks at 66.8 W. At ~53 tok/s and ~0.00058 Wh per token, this model is exceptionally energy-efficient, making it ideal for always-on or battery-conscious deployments.
+The DGX Spark's GPU draws remarkably low power during inference , averaging only 36.7 W with brief peaks at 66.8 W. At ~53 tok/s and ~0.00058 Wh per token, this model is exceptionally energy-efficient, making it ideal for always-on or battery-conscious deployments.
 
 ## Running Against Other Models
 
@@ -293,11 +296,11 @@ I extended the harness to compare three NVFP4-quantized Qwen3.6 models on the sa
 
 **Concurrency.** NVIDIA's build scales to ~350 tok/s at batch 8, roughly 2× the Red Hat build's ~155 tok/s at the same level. Unsloth's concurrency profile follows a similar pattern to its decode: competitive at low batch, falling behind under load.
 
-**Energy efficiency.** NVIDIA leads at 0.00033 Wh/token — notably better than the Red Hat build's 0.00058 Wh/token — reflecting its higher throughput on the same hardware.
+**Energy efficiency.** NVIDIA leads at 0.00033 Wh/token which is notably better than the Red Hat build's 0.00058 Wh/token.
 
 **Reasoning.** Here the data reveals a trade-off: NVIDIA's build, despite its raw speed, has a functional correctness gap in reasoning benchmarks, while Red Hat produces consistent, usable outputs. Unsloth is best reserved for low-latency, short-context tasks where fast responses matter more than depth.
 
-The TLDR is that no single build wins in every category — NVIDIA for speed, Red Hat for stability, Unsloth for short-context latency.
+The TLDR is that no single build wins in every category: NVIDIA for speed, Red Hat for stability, Unsloth for short-context latency.
 
 ## Running 3rd Party Benchmarks
 
@@ -309,6 +312,6 @@ After trying to fix the issue with using Docker's buildx plugin that automatical
 
 2. Humanity's Last Exam also didn't work since my Qwen model that I was testing wasn't able to adequately complete the testing suites without giving back nonsensical answers. I was running about 4 tests at one time (since the whole benchmarking suite takes about a day to run) and my model wouldn't give back 4 responses for the 4 prompts. I have yet to fully debug this and figure out why.
 
-Let me know how you are benchmarking local open source models! The entire repo can be found [here:](https://github.com/czhou578/model-benchmarks) 
+Let me know how you are benchmarking local open source models! The entire repo can be found [here:](https://github.com/czhou578/model-benchmarks). I will be writing up more parts of this series in the future, so stay tuned!
 
 CZ
