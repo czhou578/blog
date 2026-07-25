@@ -260,6 +260,22 @@ In this section, we have a list of wrapper functions that perform various operat
 
 This includes loading the model configuration, creating a run directory, and saving the results to a JSON file.
 
+## Argument Parsing
+
+At the bottom, we have the big function called `main()` that parses the command-line arguments and runs the benchmarks. Based upon which flags you pass in, it will run the appropriate benchmark or skip it. 
+
+All the result files are saved in the `results` directory.
+
+The lifecycle is that in the beginning, the .yaml config file is loaded. Then, a run directory is created. Then, the model is loaded. Then, the benchmark is run. Then, the results are saved. Then, the model is unloaded.
+
+I will be posting a follow up describing the individual benchmark details.
+
+Stay tuned! The code can be found here: [https://github.com/czhou578/model-benchmarks/blob/main/core_runner.py](https://github.com/czhou578/model-benchmarks/blob/main/core_runner.py)
+
+CZ
+
+
+
 
 
 
