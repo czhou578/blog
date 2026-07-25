@@ -22,11 +22,11 @@ Lastly, we have the `_get_server_model_config()` function that fetches the model
 
 ## GPU Monitor
 
-This function is the GPU monitor that is responsible for monitoring the GPU and collecting data. It is a background thread that runs continuously and collects a basket of metrics like utilization, memory usage, and power usage. 
+This class is the GPU monitor that is responsible for monitoring the GPU and collecting data. It is a background thread that runs continuously and collects a basket of metrics like utilization, memory usage, and power usage. 
 
 We track the metrics in a dictionary and store them in a list. The monitor samples continuously and the final numbers are calculated from the list of samples.
 
-We also measure within a window within a parameter of user specified length. This makes sure that we can isolate the metrics to a specific time period during different phases of the benchmark suite.
+We also measure within a window of user specified length. This makes sure that we can isolate the metrics to a specific time period during different phases of the benchmark suite.
 
 This class has a few helper functions that controls the monitor lifecycle, especially the start and stop methods. The stop method is responsible for stopping the monitor and saving the samples to a file as well as doing minor calculations of the stats to present it in a summary format.
 
@@ -156,27 +156,27 @@ There is a subtlety worth understanding: the idle baseline is not captured *duri
 
 ## Model Client
 
-THe model client is the main class that handles the communication with the model server. 
+The model client is the main class that handles the communication with the model server. 
 
-In the beginning, it is responsible for waiting for the model to be ready. This is a dedicated function that waits for the vLLM server to finish intializing, and then send a dummy chat completion request to the server to ensure that it is ready to serve requests.
+In the beginning, it is responsible for waiting for the model to be ready. This is a dedicated function that waits for the vLLM server to finish initializing, and then sends a dummy chat completion request to the server to ensure that it is ready to serve requests.
 
 We send a dummy message because the server may take some time to initialize, and we want to make sure that it is ready before we start the benchmark. 
 
-There are two routes to take note: `/v1/chat/completions` and `/v1/completions/`. These two routes are used for different purposes. The first is for real chat completions (sending an array of chat messages as input) and the second is for generating completions from a single text prompt. The second route is a legacy route that is reserved for backwards compatibility.
+There are two routes to take note: `/v1/chat/completions` and `/v1/completions`. These two routes are used for different purposes. The first is for real chat completions (sending an array of chat messages as input) and the second is for generating completions from a single text prompt. The second route is a legacy route that is reserved for backwards compatibility.
 
 There is also a function called `generate()` that takes in temperature, prompt, max_tokens, and cache salt. In this function, we send a request with the given parameters to the model server and return the response. 
 
-In the _execute_request()` function, we send the request to the model server and return the response. This is where we grab the server side timing metrics like TTFT, queue time, and prompt time. 
+In the `_execute_request()` function, we send the request to the model server and return the response. This is where we grab the server side timing metrics like TTFT, queue time, and prompt time. 
 
 1. The TTFT is the time to first token, which is the time from the start of the request to the first token being generated on the server side. It is different from the TTFT on the client side because the client TTFT is tracking the time from the start of the request to the first token being received on the client side, which includes network latency and client processing times as well.
 
-2. The queue time is the time the the request waited in the vLLM scheduler queue before being processed by the model.
+2. The queue time is the time the request waited in the vLLM scheduler queue before being processed by the model.
 
 3. The prompt time is the time from the start of the request to the start of the prefill.
 
 The server side metrics are important because it measures specifically what the model server is doing and how it performs.
 
-In addition to these metrics, we also get the cached_tokens metric, which is the number of tokens that were cached by the model server. This metric is important because it can give us an idea of how much of the model's output is actually reasoning, and how much optimization is done by the prefix cache (which is supposed to speed up the model response).
+In addition to these metrics, we also get the cached_tokens metric, which is the number of prompt tokens that were served from the prefix cache — meaning their KV blocks were already computed by a previous request. This metric is important because it tells you how much of the generation is being accelerated by caching versus actual model computation. A high cached_tokens count means the model server is reusing previous work, which directly impacts both latency and prefill throughput.
 
 ### Cache Salt
 
@@ -282,7 +282,7 @@ For each output length, it calculates the token per second rate for both runs an
 
 It also calculates the time to first token (TTFT) for both runs and compares them, and also the TPS (token per second) improvement. 
 
-`core_runner.py` runs the two variants (it starts/stops the vLLM server twice with different flags, lines 1339-1380), but it delegates the comparison logic to this function. That keeps the core runner focused on orchestration and lets the comparison be tested/reused independently. The raw results are also saved individually (`spec_enabled.json`, `spec_disabled.json`) alongside the comparison 
+`core_runner.py` runs the two variants by starting and stopping the vLLM server twice with different flags, but delegates the comparison logic to this function. That keeps the core runner focused on orchestration and lets the comparison be tested and reused independently. The raw results are also saved individually (`spec_enabled.json`, `spec_disabled.json`) alongside the comparison. 
 
 ## Orchestration
 
@@ -296,9 +296,9 @@ At the bottom, we have the big function called `main()` that parses the command-
 
 All the result files are saved in the `results` directory.
 
-The lifecycle is that in the beginning, the .yaml config file is loaded. Then, a run directory is created. After the model is loaded. the benchmarks are run. The results are saved and the model is unloaded.
+The lifecycle is that in the beginning, the .yaml config file is loaded, then a run directory is created, the model is loaded, the benchmarks are run, the results are saved, and the model is unloaded.
 
-I added a SIGTERM signal handler that detects any kind of termination signal and gracefully stops the vLLM server before exiting. Even if the user decides to kill the process, partial metrics will be still be saved. 
+I added a SIGTERM signal handler that detects any kind of termination signal and gracefully stops the vLLM server before exiting. Even if the user decides to kill the process, partial metrics will still be saved. 
 
 At the very end in that same `finally` block, I have a manual computation of the energy per token watt hour from the total decode output tokens and total energy consumption. This metric is useful since it can give us an idea of how much energy the model is consuming per token.
 
