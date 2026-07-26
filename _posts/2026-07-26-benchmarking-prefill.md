@@ -10,6 +10,9 @@ The goal is straightforward: measure how fast a model processes the prompt (the 
 
 To do this accurately, we need to hit *exact* token lengths: measuring "8K-token prompts" rather than "roughly 8K-ish prompts." Since subword tokenizers don't split at byte boundaries, the benchmark includes a calibration pipeline to find the exact character prefix that produces any target count.
 
+![Concept]({{ site.baseurl }}/images/prefill-benchmark.png)
+
+
 ---
 
 ## The calibration pipeline: hitting an exact token count
