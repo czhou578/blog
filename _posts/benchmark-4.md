@@ -12,7 +12,7 @@ The code lives in `concurrency.py` and answers a simple question:
 
 ## Purpose and Approach
 
-The core experiment is straightforward. For each concurrency level, the benchmark fires `requests_per_level` requests all at the same time using Python's `ThreadPoolExecutor`. All requests share the same prompt and parameters, so the only variable is how many are competing for the GPU at once.
+For each concurrency level, the benchmark fires `requests_per_level` requests at the same time using Python's `ThreadPoolExecutor`. All requests share the same prompt and parameters, so the only variable is how many are competing for the GPU at once.
 
 The default concurrency levels are `[1, 2, 4, 8, 16]`, covering the range from single-user to heavy multi-user load. The default `requests_per_level` is 16, which is enough to get a statistically meaningful result without running the benchmark into oblivion.
 
@@ -164,3 +164,7 @@ The latency benchmark (Part 3) tells you how fast your model serves one request.
 - **Where your system breaks**. Some requests will fail under high concurrency. The success rate and individual error messages tell you whether failures are timeouts, OOM errors, or HTTP 500s -- each of which points to a different fix.
 
 Without the concurrency benchmark, you're benchmarking a laboratory condition. With it, you're benchmarking reality.
+
+You can find the whole code here: [https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/concurrency.py](https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/concurrency.py)
+
+CZ
