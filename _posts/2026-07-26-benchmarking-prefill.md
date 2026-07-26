@@ -8,24 +8,13 @@ In this post, I walk through the **prefill scaling benchmark** — one of the th
 
 The goal is straightforward: measure how fast a model processes the prompt (the *prefill* stage) across a range of input lengths. Specifically, we want to know how **prefill throughput** (tokens processed per second) changes as the prompt grows. If the implementation scales linearly, throughput should stay flat. A steep slope signals a problem.
 
-To do this accurately, we need to hit *exact* token lengths — measuring "8K-token prompts" rather than "roughly 8K-ish prompts." Since subword tokenizers don't split at byte boundaries, the benchmark includes a calibration pipeline to find the exact character prefix that produces any target count.
-
-Now, we focus on the PASSAGES tuple:
-
-The _PASSAGES tuple is a deterministic filler engine — its only job is to produce enough text to hit a target token count. 
-
-Why a passages array instead of just repeating a string or generating random text?
-
-Determinism: same input always gives the same tokenization. No RNG, no network, no environment dependency.
-Prose-like structure matters: real word boundaries produce realistic token counts. "aaaaaaaaaa" or "01010101" would tokenize to very different token counts at the same byte length, which would bias the benchmark. The passages mimic natural language so the token budget is representative of real prompts.
-Section headers add variety: "Field record N\n" changes every repetition, preventing the binary search (§123) from hitting long flat regions where every character adds 0 tokens (though in practice the passages also prevent that).
-The content is inert: it's generic survey/expedition prose with no semantic meaning, so there's no risk of the model responding to the content itself during the benchmark — it's just a carrier for token length.
+To do this accurately, we need to hit *exact* token lengths: measuring "8K-token prompts" rather than "roughly 8K-ish prompts." Since subword tokenizers don't split at byte boundaries, the benchmark includes a calibration pipeline to find the exact character prefix that produces any target count.
 
 ---
 
 ## The calibration pipeline: hitting an exact token count
 
-The core challenge of this benchmark is that subword tokenizers (Byte-Pair Encoding, SentencePiece, etc.) don't split at byte boundaries. You can't just truncate a string to *N* bytes and expect *N* tokens. The calibration pipeline solves this by working backwards: build a large enough document, then find the longest prefix that tokenizes to exactly the target count.
+The core challenge of this benchmark is that subword tokenizers (Byte-Pair Encoding, SentencePiece, etc.) don't split at byte boundaries. You can't just truncate a string to *N* bytes and expect *N* tokens. The calibration pipeline solves this by working backwards: build a large enough document, then finding the longest prefix that tokenizes to exactly the target count.
 
 ### Building a candidate document
 
@@ -115,7 +104,7 @@ The calibration pipeline is what lets the benchmark claim "we measured 8K-token 
 
 The pipeline also makes benchmarking new models *plug-and-play*: you pass any object with a `tokenize_prompt` method, and the rest of the code works without knowing the model's architecture, vocabulary size, or tokenizer type.
 
-Before any benchmark runs, the code defines a small set of data types that carry information between the calibration, request execution, and result aggregation stages. They're not glamorous, but they're what keep the output reproducible and the error handling from turning into a maze of nested conditionals.
+Before any benchmark runs, the code defines a small set of data types that carry information between the calibration, request execution, and result aggregation stages. They're what keep the output reproducible and the error handling from turning into a maze of nested conditionals.
 
 ### Protocols: minimal interfaces
 
@@ -129,7 +118,7 @@ class PromptTokenizer(Protocol):
     def tokenize_prompt(self, prompt: str) -> TokenCount: ...
 ```
 
-`TokenCount` is a one-field data contract: it says "something returned a token count." `PromptTokenizer` is a *protocol* — Python's structural typing marker — that describes the tiny slice of `ModelClient` the calibration functions actually need: just `tokenize_prompt()`. By using a protocol instead of importing `ModelClient` itself, the calibration module stays decoupled. Any object with a matching `tokenize_prompt` method works, whether it's the real client or a test double. This also makes the calibration logic swappable without dragging in the full network stack.
+`TokenCount` is a one-field data contract: it says "something returned a token count." `PromptTokenizer` is a *protocol* that describes the tiny slice of `ModelClient` the calibration functions actually need: just `tokenize_prompt()`. By using a protocol instead of importing `ModelClient` itself, the calibration module stays decoupled. Any object with a matching `tokenize_prompt` method works, whether it's the real client or a test double. This also makes the calibration logic swappable without dragging in the full network stack.
 
 ### CalibratedPrompt: the prompt after it's been measured
 
@@ -190,7 +179,7 @@ def _empty_stats() -> dict[str, None]:
     return {"avg_s": None, "median_s": None, "p95_s": None, "min_s": None, "max_s": None}
 ```
 
-When a length has zero successful requests (or zero TPS values), the aggregation step can't compute statistics. `_empty_stats()` returns a dict full of `None` values with the *same shape* as a real `_stat_summary()` result. This keeps the JSON schema consistent — downstream tools don't need to check for a missing key; they just see `null` and move on.
+When a length has zero successful requests (or zero TPS values), the aggregation step can't compute statistics. `_empty_stats()` returns a dict full of `None` values with the *same shape* as a real `_stat_summary()` result. This keeps the JSON schema consistent: downstream tools don't need to check for a missing key; they just see `null` and move on.
 
 ### _per_request_summary: flattening a dataclass for JSON
 
@@ -208,7 +197,7 @@ def _per_request_summary(r: PrefillRequestResult) -> dict[str, Any]:
 
 ### _error_result: one factory, three exception paths
 
-The benchmark catches three kinds of exceptions during request execution, and each path needs to build a `PrefillRequestResult` with `success=False`. Instead of duplicating that dataclass construction three times (which is how bugs creep in — one path updates a field the other forgets), the code uses `_error_result`:
+The benchmark catches three kinds of exceptions during request execution, and each path needs to build a `PrefillRequestResult` with `success=False`. Instead of duplicating that dataclass construction three times (which is how bugs creep in, one path updates a field the other forgets), the code uses `_error_result`:
 
 ```python
 def _error_result(
@@ -242,7 +231,7 @@ This pattern — factory returns a tuple of (result, status, stop) — keeps the
 
 ## The main benchmark function: `run_prefill_scaling`
 
-All the pieces above assemble into the orchestrator — a function that turns a list of target lengths into a structured JSON report. It's less about clever algorithms and more about disciplined structure: config, per-length loops, error handling, aggregation.
+All the pieces above assemble into the orchestrator.
 
 ### Configuration and cache detection
 
@@ -255,9 +244,9 @@ def run_prefill_scaling(
 ) -> dict[str, Any]:
 ```
 
-The function starts by building a `config` dict that captures every assumption and setting. This is what makes a benchmark result *reproducible* — anyone running the same model with the same config should get the same results.
+The function starts by building a `config` dict that captures every assumption and setting. This is what makes a benchmark result *reproducible*: anyone running the same model with the same config should get the same results.
 
-A key step: **cache isolation detection** (§302). The vLLM server supports a `cache_salt` header that forces each request to start with a cold cache. If the server supports it, the benchmark uses that header; if not, it falls back to prepending a unique text string. The choice matters because it affects how the server's prefix cache behaves.
+A key step: **cache isolation detection** (§302). The vLLM server supports a `cache_salt` header that forces each request to start with a cold cache. If the server supports it, the benchmark uses that header; if not, it falls back to prepending a unique text string.
 
 ```python
 is_header = client.preflight_cache_salt()
@@ -278,7 +267,7 @@ for length in target_lengths:
         continue
 ```
 
-The outer loop iterates over each target length. The `stopped` flag is the OOM guard: if the GPU runs out of memory, subsequent lengths are marked `skipped_after_oom` rather than crashing. This is significant because larger prompts consume more memory — an OOM at 32K almost certainly means 64K won't fit either, and the benchmark would fail redundantly.
+The outer loop iterates over each target length. The `stopped` flag is the OOM guard: if the GPU runs out of memory, subsequent lengths are marked `skipped_after_oom` rather than crashing. This is significant because larger prompts consume more memory. An OOM at 32K almost certainly means 64K won't fit either, and the benchmark would fail redundantly.
 
 Each length follows a fixed sequence:
 
@@ -295,7 +284,7 @@ Each length follows a fixed sequence:
 
 ### The inner loop: measuring requests
 
-Each length gets `repetitions` requests (default 5). Each request has a unique `cache_salt` to guarantee cold cache — without it, the server might reuse the prefix from a previous request, invalidating the benchmark.
+Each length gets `repetitions` requests (default 5). Each request has a unique `cache_salt` to guarantee cold cache. Without it, the server might reuse the prefix from a previous request, invalidating the benchmark.
 
 ```python
 for req_idx in range(repetitions):
@@ -379,8 +368,14 @@ If a `GpuMonitor` is attached, the function computes **energy-per-token** (§428
 energy_per_input_token_wh = energy_wh / actual_tokens
 ```
 
-This is significant for benchmarking — it lets you measure not just *how fast* a model is, but *how energy-efficient* it is at each prompt length. Energy cost is often the real constraint in production deployments.
+This is significant for benchmarking. Tt lets you measure not just *how fast* a model is, but *how energy-efficient* it is at each prompt length. Energy cost is often the real constraint in production deployments.
 
 ### Why this structure matters
 
-`run_prefill_scaling` is a template for any benchmark: detect assumptions → validate inputs → measure in controlled iterations → handle failures gracefully → aggregate with statistics. The function is intentionally data-driven: change the `target_lengths` list or the `repetitions` count and the same code handles it. This separation of *orchestration* from *measurement* is what makes the benchmark extensible — new metrics, new monitoring, or new error paths can be added without rewriting the core loop.
+`run_prefill_scaling` is a template for any benchmark: detect assumptions → validate inputs → measure in controlled iterations → handle failures gracefully → aggregate with statistics. The function is intentionally data-driven: change the `target_lengths` list or the `repetitions` count and the same code handles it. This separation of *orchestration* from *measurement* is what makes the benchmark extensible.
+
+You can find the full source code on [GitHub](https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/prefill.py)
+
+Stay tuned for the next part!
+
+CZ
