@@ -4,7 +4,7 @@ title: "Developing my own Benchmark Pt. 4 (The Concurrency Test)"
 date: 2026-07-26
 ---
 
-In Part 3 of my series, I covered the latency and decode benchmarks that measure single-request performance. But a model that performs well in isolation doesn't tell the whole story. In production, multiple users hit the model simultaneously, and the GPU's resources get contested. This is where the concurrency benchmark comes in -- it measures throughput and latency degradation as request concurrency increases.
+In Part 3 of my series, I covered the latency and decode benchmarks that measure single-request performance. But a model that performs well in isolation doesn't tell the whole story. In production, multiple users hit the model simultaneously, and the GPU's resources get contested. This is where the concurrency benchmark comes in: it measures throughput and latency degradation as request concurrency increases.
 
 The code lives in `concurrency.py` and answers a simple question:
 
@@ -14,7 +14,7 @@ The code lives in `concurrency.py` and answers a simple question:
 
 For each concurrency level, the benchmark fires `requests_per_level` requests at the same time using Python's `ThreadPoolExecutor`. All requests share the same prompt and parameters, so the only variable is how many are competing for the GPU at once.
 
-The default concurrency levels are `[1, 2, 4, 8, 16]`, covering the range from single-user to heavy multi-user load. The default `requests_per_level` is 16, which is enough to get a statistically meaningful result without running the benchmark into oblivion.
+The default concurrency levels are `[1, 2, 4, 8, 16]`, covering the range from single-user to heavy multi-user load. The default `requests_per_level` is 16, which is enough to get a statistically meaningful result. 
 
 ## The Core Loop
 
@@ -63,7 +63,7 @@ If a request fails (e.g., the server rejects it under load), the error is captur
 
 ## The Prompt
 
-Every request uses the same prompt: the creative-writing prompt from `core_runner.py`, built to exactly 256 tokens. This is deliberate:
+Every request uses the same prompt: the creative-writing prompt from `core_runner.py`, built to exactly 256 tokens.
 
 - **Determinism**: the prompt is fixed across all concurrency levels, so any difference in results comes from concurrency, not from different prompts.
 - **Fixed context size**: 256 tokens is long enough for the prefill phase to be meaningful but short enough that it doesn't dominate wall time.
@@ -121,11 +121,11 @@ Aggregate numbers hide outliers. Individual requests expose them. A single reque
 
 ### Fixed Parameters
 
-Temperature is 0.0, max_tokens is 256, and the prompt is always the same. This minimizes variance. The benchmark isn't testing whether the model behaves differently at different temperatures; it's testing whether the server handles concurrent load. Keeping everything else constant makes the results comparable.
+Temperature is 0.0, max_tokens is 256, and the prompt is always the same. This minimizes variance. The benchmark isn't testing whether the model behaves differently at different temperatures; it's testing whether the server handles concurrent load.
 
 ### 256 Token Prompt
 
-Why not use a longer prompt? The answer is that the concurrency benchmark is about scheduling, not prefill. A 32K-token prompt would make prefill the dominant cost, and the concurrency test would measure how the prefill scheduler handles load, which is a different question. At 256 tokens, the prefill is fast (5-30ms) and the decode dominates. This isolates the scheduling and GPU-contention behavior.
+Why not use a longer prompt? The answer is that the concurrency benchmark is about scheduling, not prefill. A 32K-token prompt would make prefill the dominant cost. At 256 tokens, the prefill is fast (5-30ms) and the decode dominates. This isolates the scheduling and GPU-contention behavior.
 
 ### Number of Requests Per Level
 
@@ -139,31 +139,17 @@ The default is 16 requests per level. This is a practical choice:
 
 The concurrency benchmark doesn't pass a cache salt. This means prefix caching is active: if a previous request at the same or lower concurrency already computed some KV blocks, later requests can reuse them. This makes the benchmark measure "real world" performance, where caching helps.
 
-If you want to measure cold TTFT under concurrency (worst case), you'd add cache isolation. That's a planned future enhancement.
-
-### Why Not Asyncio?
-
-You might wonder why the benchmark doesn't use `asyncio` and an async HTTP client. Two reasons:
-
-1. **The client is synchronous.** The `ModelClient` in `core_runner.py` uses the standard OpenAI synchronous streaming client. Converting it to async would require changes to `core_runner.py` itself.
-
-2. **The benchmark is simple.** ThreadPoolExecutor is correct-by-construction. asyncio requires careful task management, error handling, and a custom event loop. For a benchmark that runs once per model config, the extra complexity isn't worth it.
-
-If the core runner were async-first, the concurrency benchmark would be async-native. But threads are the right tool for now.
-
 ## Integration with the Core Runner
 
 `concurrency.py` is imported lazily by `core_runner.py` inside the main orchestration loop. The lazy import ensures the concurrency module is only loaded when the user hasn't passed `--skip-concurrency`. The results are saved to `concurrency.json` alongside the latency, decode, and reasoning results, giving a complete picture of serving scalability.
 
 ## Why This Matters
 
-The latency benchmark (Part 3) tells you how fast your model serves one request. The concurrency benchmark tells you how fast it serves *your* workload. In production, you'll have concurrent users, concurrent API calls, concurrent background jobs. The concurrency benchmark reveals:
+The latency benchmark (Part 3) tells you how fast your model serves one request. The concurrency benchmark tells you how fast it serves *your* workload. In production, you'll have concurrent users, API calls, and background jobs. The concurrency benchmark reveals:
 
 - **Where the GPU bottleneck lives**. Throughput plateaus when the GPU can no longer parallelize across requests. That plateau tells you the maximum throughput of your model at its current configuration.
 - **How latency degrades under load**. At concurrency 1, the average TTFT might be 100ms. At concurrency 16, it might be 500ms. A 5x increase in concurrency causing a 5x increase in TTFT is normal (linear queuing). A 5x increase causing 50x TTFT means the scheduler is contending.
-- **Where your system breaks**. Some requests will fail under high concurrency. The success rate and individual error messages tell you whether failures are timeouts, OOM errors, or HTTP 500s -- each of which points to a different fix.
-
-Without the concurrency benchmark, you're benchmarking a laboratory condition. With it, you're benchmarking reality.
+- **Where your system breaks**. Some requests will fail under high concurrency. The success rate and individual error messages tell you whether failures are timeouts, OOM errors, or HTTP 500s. 
 
 You can find the whole code here: [https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/concurrency.py](https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/concurrency.py)
 
