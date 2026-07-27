@@ -1,10 +1,13 @@
 ---
 layout: post
 title: "Developing my own Benchmark Pt. 4 ()"
-date: 2026-07-24
+date: 2026-07-27
 ---
 
 In this post, I want to discuss the TTFT benchmark in more detail, since it is crucial for the benchmarking of the request life cycle.
+
+![TTFT]({{ site.baseurl }}/images/ttft.png)
+
 
 ## TTFT
 
@@ -101,13 +104,13 @@ For each target prompt length, the benchmark builds a simple repeated `"hello wo
 2. The actual token count is reported via `gen.prompt_tokens`, so the JSON output always has the ground truth
 3. Tokenizer-based prompt building would add complexity (a dependency on the model's tokenizer) that isn't needed for a timing-only benchmark
 
-This is the kind of tradeoff worth documenting: the benchmark is intentionally scoped. Future phases can layer in exact-token prompts; the current version measures what matters for TTFT decomposition without over-engineering.
+Future phases can layer in exact-token prompts; the current version measures what matters for TTFT decomposition without over-engineering.
 
 ## OOM Handling and Early Exit
 
 If a request fails with an OOM or memory error, the benchmark records the failure and sets a `stopped` flag. All subsequent prompt lengths are skipped with a `"skipped_after_oom"` status. This prevents cascading failures and produces a clean JSON file that clearly shows which prompt lengths fit in GPU memory and which don't.
 
-A more sophisticated approach would try to reduce the batch size or switch to a different quantization, but for a benchmark that's measuring fixed configurations, an explicit failure is the right signal. It tells you the model doesn't fit, period.
+A more sophisticated approach would try to reduce the batch size or switch to a different quantization, but for a benchmark that's measuring fixed configurations, an explicit failure is the right signal.
 
 ## Output Structure
 
@@ -123,4 +126,8 @@ The per-request granularity is important. Aggregate numbers hide outliers. Seein
 
 TTFT is the single most important metric for user-facing latency. A model that decodes at 200 tok/s feels great if the first token arrives in 50 ms. A model that decodes at 300 tok/s feels terrible if the first token takes 2 seconds. Without decomposing TTFT, you can't tell whether a slow first token comes from queueing (a concurrency/scheduling problem), prefill (a compute/architecture problem), or first decode (a kernel or GPU memory problem).
 
-This benchmark turns a single number into a diagnostic.
+The full code lives in [https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/ttft_breakdown.py](https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/ttft_breakdown.py)
+
+Stay tuned for more!
+
+CZ
