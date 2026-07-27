@@ -1,10 +1,13 @@
 ---
 layout: post
-title: "Developing my own Benchmark Pt. 4 (The Concurrency Test)"
-date: 2026-07-26
+title: "Developing my own Benchmark Pt. 5 (The Concurrency Test)"
+date: 2026-07-28
 ---
 
 In Part 3 of my series, I covered the latency and decode benchmarks that measure single-request performance. But a model that performs well in isolation doesn't tell the whole story. In production, multiple users hit the model simultaneously, and the GPU's resources get contested. This is where the concurrency benchmark comes in: it measures throughput and latency degradation as request concurrency increases.
+
+![Concurrency Benchmark]({{ site.baseurl }}/images/concurrency-benchmark.png)
+
 
 The code lives in `concurrency.py` and answers a simple question:
 
