@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Developing my own Benchmark Pt. 4 ()"
+title: "Developing my own Benchmark Pt. 4 (TTFT)"
 date: 2026-07-27
 ---
 
