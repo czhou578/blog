@@ -124,7 +124,7 @@ Aggregate numbers hide outliers. Individual requests expose them. A single reque
 
 ### Fixed Parameters
 
-Temperature is 0.0, max_tokens is 256, and the prompt is always the same. This minimizes variance. The benchmark isn't testing whether the model behaves differently at different temperatures; it's testing whether the server handles concurrent load.
+The temperature is 0.0, max_tokens is 256, and the prompt is always the same. This minimizes variance. The benchmark isn't testing whether the model behaves differently at different temperatures; it's testing whether the server handles concurrent load.
 
 ### 256 Token Prompt
 
