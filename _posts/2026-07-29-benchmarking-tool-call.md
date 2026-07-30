@@ -8,6 +8,8 @@ Every model marketing page today claims "excellent tool calling." The problem? T
 
 I built a benchmark to answer these questions. Here's what it does, why it matters, and what I learned building it.
 
+![Toolcalling Benchmark]({{ site.baseurl }}/images/benchmark-toolcalling.png)
+
 ## What tool-calling actually means
 
 When an LLM "calls a tool," the model receives a description of available tools (their names, what they do, what parameters they expect), and it must select the right one and fill in the parameters correctly.
@@ -148,3 +150,5 @@ I delegate helper functions only when an operation can be repeatedly used, which
 *This post is part of my series on developing benchmarks for AI systems. Previous posts cover general benchmarking methodology and my approach to measuring model capabilities.*
 
 The full code can be found here: [https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/tool_calling.py](https://github.com/czhou578/model-benchmarks/blob/main/benchmarks/tool_calling.py)
+
+CZ
