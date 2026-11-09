@@ -4,16 +4,15 @@ title: "Pruning DeepSeek: A Comprehensive Guide"
 date: 2026-11-07
 ---
 
-I have been working with DeepSeek v1 Flash to run my stock-research bot on my single DGX Spark. 
+I have been working the past few months with DeepSeek v1 Flash 0731 to run my stock-research bot on my single DGX Spark. It has been amazing to automate the previously tedious research in this process and have well researched stock reports deposited into my custom Discord channel every morning.
 
-I have always wanted to create a model router that can intelligently select the best model for a given task. My idea was to use DeepSeek to serve as a high reasoning model while a smaller model like Qwen could handle the simpler tasks.
+Despite this, I have always considered DeepSeek to be the very heavy reasoning model that I can run. Ultimately my DGX Spark is capable of running multiple local models at once, why shouldn't it? 
+
+I have always wanted to create a model router that can intelligently select the best local model for a given task. My idea was to use DeepSeek to serve as a high reasoning model while a smaller model like Qwen could handle simpler tasks. This could also unlock ways to drive Qwen with DeepSeek and so much more.
 
 The problem is that DeepSeek is a very large model which takes up most of my Spark's 128gb of memory. For a 27b model to fit in memory with enough KV cache room to be useful, there had to be drastic reductions in space usage. 
 
-
-Since DeepSeek is a mixture of experts model, I was curious as to whether it was possible to prune the experts of the model to retain only the experts that were the most used & activated.
-
-Further quantization made no sense since I was already using a heavily quantized EXL3 model (the original model was 284 billion parameters).
+Since DeepSeek is a mixture of experts model, I was curious as to whether it was possible to prune the experts of the model to retain only the experts that were the most used & activated. Further quantization made no sense since I was already using a heavily quantized EXL3 model (the original model was 284 billion parameters).
 
 Here are the original model specs:
 
@@ -52,9 +51,9 @@ Those 6 tokens per step matter for the key idea of this project: an MoE model ha
 - **K**, the number of routed experts in each layer, controls memory. The server loads all K experts, so each expert that I remove from every layer frees about 0.4 GiB. It saves almost no time, because each token still reads 6 experts.
 - **Top-k**, the number of experts that each token uses, controls speed. Memory bandwidth (about 273 GB/s) limits the decode on the Spark, so fewer bytes per token give more tokens per second. It saves no memory, because all K experts stay loaded.
 
-The math shows why. In each layer, a decode step reads every expert that any of its 6 tokens picks. At K 216 and top-k 6, that is about 34 experts per layer: 13.7 GB per step, plus about 7 GB of static weights. If I cut K to 160, the count only drops to about 33, because 6 tokens × 6 experts can never read more than 36. If I cut top-k to 5, it drops to about 28.
+In each layer, a decode step reads every expert that any of its 6 tokens picks. At K 216 and top-k 6, that is about 34 experts per layer: 13.7 GB per step, plus about 7 GB of static weights. If I cut K to 160, the count only drops to about 33, because 6 tokens × 6 experts can never read more than 36. If I cut top-k to 5, it drops to about 28.
 
-So to free memory without losing speed, I would need to pull both levers.
+So to free memory without losing speed, I would need to adjust both levers.
 
 ## Building the baseline
 
@@ -80,7 +79,7 @@ assistant  ACME's revenue rose 12% to $4.1 billion.    <- the recorded turn: the
 
 *A simplified example. The company, the tool and the numbers are made up.*
 
-The model writes nothing new here. vLLM returns the log-probability of every token in this prompt, and the screen keeps only the tokens of the last turn. For each token, the question is: after everything before it, how likely does the model find the token that the stock model actually wrote?
+vLLM returns the log-probability of every token in this prompt, and the screen keeps only the tokens of the last turn. For each token, the question is: after everything before it, how likely does the model find the token that the stock model actually wrote?
 
 The screen turns these probabilities into one score: the NLL (negative log-likelihood) per token, which is the mean of −ln p over the tokens of the turn. A token that the model expects (p near 1) adds almost nothing, and a surprising token (p near 0) adds a lot. So a lower NLL means that the model finds the recorded reply more likely.
 
@@ -234,8 +233,163 @@ The loss doubled from K 192 to K 176, so I stopped there. K 160, the size that I
 
 Why did REAP do so badly? Its rank came from code, math, science and tool-call data. My bot reads earnings reports, SEC filings and web pages, so the REAP rank dropped some experts that my bot actually uses. The next step was to rank the experts on my bot's own traffic.
 
+## Step 6: Rank Experts on my bot's traffic
 
+The REAP rank measures the experts that the model uses on a general-purpose dataset. 
 
+I wanted to measure the experts that my bot actually uses, so I built a new rank. 
 
+The first step was to boot `compose-capture.yml`, which starts vLLM in a special mode for the capture.
 
+The goal is to see which experts the unchanged model uses on your bot's traffic. So all 216 experts must be available to the router.
 
+vLLM's Model Runner V1 allows us to define a capture flag, which is `--capture-return-routed-experts` which keeps each choice of experts for each token in each layer, and sends it back in the reply. 
+
+There is no DSpark draft in this step. 
+
+Next, I have a custom Python script that sends the 57 recorded sessions to the model, and collects the routed experts for each token in each layer.
+
+The script uses the 34 segments of the calibration split. These are the sessions that the replay screen does not use. If the rank and the test used the same sessions, the replay screen would grade the rank on the data that made it. The test would then look better than the truth.
+
+Each request holds the recorded context up to the last target turn, as in the replay screen. That is the system prompt, the user messages, the tool calls, the tool results (SEC filings, web pages, price tables) and the assistant turns.
+
+The server writes only one new token and stops. Before that token, it must read the full prompt through all 43 layers. During this read, the router picks 6 experts for every prompt token in every layer, and the capture records all of those picks. The script then ignores the one generated token.
+
+Reading a prompt (prefill) processes all of its tokens in parallel, so it is much faster than writing tokens one at a time. The routing during the read is also the same routing that the model uses on that text in real use. The router's choice for a token depends only on the tokens before it, and the read sees exactly those tokens. Thus 34 requests give the expert choices for 2,023,990 tokens of real bot traffic, and this took no generation at all.
+
+Then the script decodes the routing from each reply. The field `choices[0].routed_experts` holds a long string of text. JSON can carry only text, so the server encodes the binary data as base64, and the script decodes it back into bytes. Those bytes are a NumPy `.npy` file, and `np.load` turns them into an array with the shape (prompt tokens, layers, top-k).
+
+Each entry is one expert id. For example, `routed[1000, 5]` might be `[12, 87, 140, 118, 63, 9]`: the 6 experts that the router picked for token 1000 in layer 5. A 48k-token prompt gives 48,000 × 43 × 6 ≈ 12 million ids, which is why the server sends them as binary. The script also checks that the array has exactly one row for each prompt token.
+
+Next, the script counts how often each of the 216 experts appears in each layer, which gives 43 rows of 216 counts. Two details keep the counts honest:
+
+1. **The shared prefix counts only once.** Every request starts with the same system prompt and tool definitions. If the script counted them in all 34 requests, the experts that read the system prompt would get 34 times their real weight. So the script asks the server's `/tokenize` endpoint for the tokens of the system prompt and the tools, finds how many of the first prompt tokens match, and counts those rows only the first time that this prefix appears.
+2. **Unfilled rows do not count.** A real router never picks the same expert twice for one token, so a row of six equal ids marks a token that the capture did not fill. The script skips those rows. My run had none.
+
+This is how 2,023,990 prompt tokens became 1.75 M counted tokens. The difference is the repeated prefix.
+
+Finally, the script writes everything to `expert_rank_bot.json`:
+
+- **Per layer:** all 216 experts, most used first, each with its id, its count and its share of the picks in that layer. One expert gets 1/216 ≈ 0.46% of the picks on average.
+- **Per skill:** the same counts, split by the bot skill of each session. These show whether an expert is rare overall but important for one skill.
+- **Totals:** the prompt tokens, the counted tokens and the unfilled rows.
+
+The mask tool reads this file the same way it read the REAP rank: for a mask with K experts, it drops the 216 − K experts at the bottom of each layer's list.
+
+The capture boot takes my live bot offline, so I made the script easy to resume. Each segment writes one line of counts to an output file, and a rerun skips the segments that are already done. A separate pass then adds up the lines into the JSON file. Later, I also extended the script to rank the experts by router weight, but this step used the plain count.
+
+Before I booted any new mask, I compared the two ranks on the capture data. The question was simple: how much of my bot's routing goes to the experts that each mask drops? The less traffic the dropped experts carry, the less the bot should notice that they are gone.
+
+![Per layer, the share of the bot traffic that the dropped experts carry]({{ site.baseurl }}/images/rank-drop-share.svg)
+
+*The REAP rank drops more of the bot's traffic with 24 experts than the bot rank does with 56. For each learned-router layer, the share of the bot's routed tokens that goes to the dropped experts of each mask. The dotted line marks the share of any 24 experts (24 of 216 = 11.1%).*
+
+Each dot is one of the 40 learned-router layers (3 to 42). Its height is the share of my bot's routed tokens that go to the experts that the mask drops in that layer. Lower is better.
+
+The REAP mask at K 192 drops only 24 experts per layer, but they carry 10.0% of my bot's routed tokens on average, and 23.2% in layer 37. Any 24 of the 216 experts would carry 11.1% (24 / 216). So for my bot, the REAP rank is barely better than a random choice.
+
+The bot rank does much better. Its 40 least used experts carry 2.4% of the routing, and no layer goes above 5%. Even its 56 least used experts carry only 4.8% on average (7.3% at most), although 17 of the 40 layers go above 5%. So the bot rank drops more than twice as many experts as REAP, and still removes less than half as much of my bot's traffic.
+
+The two ranks also disagree on which experts to drop. At K 160, they share only about 23 of the 56 dropped experts per layer.
+
+### Results:
+
+Then I built the two bot-rank masks, K 176 and K 160, and ran them through the replay screen. The table also shows the baseline and the REAP mask at K 192. "Answer top-1" is the share of answer tokens that the model ranks first: how often its first choice is the token that the stock model wrote.
+
+| Rank | K | NLL | NLL change | Answer top-1 | Tool names | Replay gates |
+|---|---|---|---|---|---|---|
+| none | 216 | 0.4440 | 0 | 91.40% | 77 of 83 | Baseline |
+| REAP | 192 | 0.4587 | +3.31% | 91.08% | 78 of 83 | Fail |
+| bot | 176 | 0.4453 | +0.29% | 91.24% | 77 of 83 | Pass |
+| **bot** | **160** | **0.4501** | **+1.37%** | **91.23%** | **78 of 83** | **Pass** |
+
+![Replay NLL change against K for the REAP rank and the bot rank]({{ site.baseurl }}/images/nll-vs-k.svg)
+
+*The bot rank moves the whole curve down. Replay NLL change against K for both ranks, at top-k 6. The bot rank at K 160 drops 56 experts and costs less than half of the REAP rank at K 192, which drops 24.*
+
+Both bot-rank masks pass the replay screen. K 176 costs +0.29%, close to the 0.23% noise floor. K 160 costs +1.37%, less than half of the +3% gate, and it is the size that I needed. The bot rank at K 176 drops 40 experts and costs about a tenth of what the REAP rank costs with only 24.
+
+The answer top-1 and the tool names barely moved at either size. The top-1 share fell by less than 0.2 points (91.40% to 91.23%), so the masked models still make almost the same first choices as the stock model. They also still pick the right tools.
+
+A pass here is a pass of the replay screen only. The replay targets come from the same weeks of traffic as the capture, so traffic of a new kind can use other experts. 
+
+## Step 7: Fewer experts per token
+
+The problem now is that the DSpark draft was designed to work with the full K = 216 model, not with anything pruned.
+
+When I ran the bot K 160 mask with the draft, the acceptance dropped from 2.25 to 2.09 tokens in the bot test and from 2.67 to 2.45 in the code test.
+
+A smaller K cannot win this back. The decode reads the weights from memory, and each token still reads 6 routed experts, whatever K is. A smaller K saves memory, not bytes per token. Only fewer experts per token cut the bytes per token.
+
+Here is how I fixed this:
+
+I cut top-k, the number of routed experts that each token uses. First I built a tool that makes a top-k copy of a mask, and then I tested which value to use.
+
+### The top-k tool
+
+My tool `topk_checkpoint.py` copies a mask folder and changes the number of experts per token. It changes no expert weights. vLLM reads top-k from one number in `config.json`, `num_experts_per_tok`, so the tool sets that number to the new top-k. In every layer, top-k 5 means the same thing: each token loses the weakest of its 6 experts.
+
+In layers 3 to 42, the config change is enough. The router now takes its top 5 in place of its top 6, so it drops the expert that was 6th. vLLM then renormalizes the weights of the 5 kept experts, so they add up to the same total as the 6 did. The mask bias still keeps the dropped experts out.
+
+Layers 0 to 2 need more work. vLLM expects the `tid2eid` table to have one column for each expert of a token, so (129,280, 5) now. The file still holds 6 columns, so the boot would fail with a shape mismatch. The tool must drop one id from each row.
+
+The column position means nothing, so the tool drops the id with the smallest router weight, the same rule as in the other layers. But the real weight depends on the input to the layer, and attention mixes the earlier tokens into that input. So one token id gets a different input in every sentence, but the table has only one row for it. The tool uses an estimate: it puts the token's own embedding in place of the real input, and drops the id with the lowest score.
+
+```text
+token "price", layer 0 (made-up numbers)
+row before:  [ 17,   92,  140,    5,  201,   63 ]
+est. score:  [1.4,  0.9,  1.6,  0.5,  1.2,  1.1 ]
+row after:   [ 17,   92,  140,       201,   63 ]   <- id 5 has the lowest score
+```
+
+By the same estimate, the dropped expert carried about 12 to 13% of a token's routing weight in these layers. With 6 equal weights, each expert would carry 16.7%. So the tool drops a weaker expert than average, but not one with zero weight.
+
+Then the tool writes the new folder:
+
+1. It rewrites the one file that holds the 3 tables (4.28 GB) with the new table shapes. The other 495 tensors in that file stay byte for byte the same.
+2. It links the other files, such as the 43 expert files of about 88 GB, in place of a copy. So one folder takes only about 35 seconds.
+3. It runs a self-check: each new row holds only ids from the old row, and every other tensor has the same bytes as before.
+
+```bash
+python topk_checkpoint.py --source tp1-botmask-k160 --top-k 5 --out tp1-botmask5-k160
+```
+
+Each boot loaded the new tables with no error, and the EXL3 runtime line showed `topk=5`. But layers 0 to 2 use an estimate, so only the replay screen can show the real cost.
+
+### Testing potential top-k values
+
+Top-k takes only whole numbers, so I had three values to test: 6, 5 and 4. Before any test, I estimated that top-k 5 would decode about 9% faster than top-k 6, and top-k 4 about 21% faster. But each expert that a token loses also costs some quality, and I could not predict how much. So I measured it.
+
+I wrote down the rules for the pick before the test, so that the results could not change them:
+
+1. Drop each point that fails a gate.
+2. From the rest, take the fastest point. Two speeds within the 4.2% noise count as equal.
+3. If two points have equal speed, take the smaller one.
+
+Then a script tested three points in one night, from 2026-11-04 to 2026-11-05: bot K 160 at top-k 5, bot K 160 at top-k 4, and K 216 at top-k 5 with no mask. For each point, it booted the server, ran the replay screen and then the speed tests (the median of 3 runs per test). At the end, it restored my live server.
+
+### Results:
+
+The table shows the three points of the night next to the stock model and bot K 160 at top-k 6. The speed changes compare each point with the stock model. "Acceptance" is the number of draft tokens that the full model accepts per draft, in the bot test and in the code test.
+
+| Rank | K | Top-k | NLL change | Tool names | Bot test | Code test | Acceptance (bot / code) | Result |
+|---|---|---|---|---|---|---|---|---|
+| none | 216 | 6 | 0 | 77 of 83 | 33.64 tok/s | 38.86 tok/s | 2.25 / 2.67 | Baseline |
+| bot | 160 | 6 | +1.37% | 78 of 83 | 31.50 (−6.4%) | 35.67 (−8.2%) | 2.09 / 2.45 | Slower |
+| **bot** | **160** | **5** | **+2.27%** | **79 of 83** | **33.98 (+1.0%)** | **42.07 (+8.3%)** | **2.10 / 2.76** | **The pick** |
+| bot | 160 | 4 | +6.05% | 79 of 83 | 36.05 (+7.2%) | 42.78 (+10.1%) | 2.00 / 2.51 | NLL fail |
+| none | 216 | 5 | +1.29% | 49 of 54 | – | – | – | Pass (35 targets) |
+
+Top-k 4 is the fastest point, but its NLL change of +6.05% is twice the gate. So rule 1 drops it.
+
+Top-k 5 passes with room to spare: +2.27% against the +3% gate, and it still picks the right tools. Compared with top-k 6 at the same K 160, it decodes 7.9% faster in the bot test and 17.9% faster in the code test, for only +0.87% more NLL. Compared with the stock model, the code test gains 8.3%, above the noise. The bot test gains 1.0%, inside the noise, so it is as fast as the stock model. Top-k 5 won back all the speed that the mask lost.
+
+The acceptance column shows where that speed came from. In the bot test, the acceptance hardly changed from top-k 6 (2.09 to 2.10), so the gain there comes from fewer bytes per token. In the code test, the acceptance also rose from 2.45 to 2.76, even above the 2.67 of the stock model, so the code test gained more.
+
+So 5 is the smallest top-k that stays inside the quality gate, and the rules picked bot K 160 at top-k 5.
+
+The last row, K 216 at top-k 5 with no mask, answers one more question: does the mask make the top-k cut worse? The memory watch stopped this replay at 35 of 60 targets, and the speed tests did not run. So I compared the points on those 35 targets only. There, top-k 5 alone cost +1.29%, and the mask alone cost +1.24%. Both together cost +2.50%, about the sum of the two. So the two costs simply add up, and neither change makes the other one worse.
+
+**Lesson:** The number of experts per layer sets the size. The number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster.
+
+The number of experts per layer sets the size. The number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster, and a draft model for speculative decoding loses acceptance when the target changes.
