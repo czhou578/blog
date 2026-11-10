@@ -393,3 +393,204 @@ The last row, K 216 at top-k 5 with no mask, answers one more question: does the
 **Lesson:** The number of experts per layer sets the size. The number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster.
 
 The number of experts per layer sets the size. The number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster, and a draft model for speculative decoding loses acceptance when the target changes.
+
+## Step 8: Full runs and the final review
+
+Before I cut any experts out of the files, the pick (bot K 160 at top-k 5) had to pass two more tests: the full runs, and a final review of its answers.
+
+The full run on 2026-11-05 sent 15 bot prompts through the real agent. All 15 finished, and the boot log showed `topk=5`. Every check passed except the report marker on one prompt: the model wrote the full report in its reply, but saved no file. The stock model also skipped that save on 1 of 3 runs of the same prompt, so I counted it as a problem of the prompt, not of the model.
+
+### The final review: 100 judge pairs and 20 blind pairs
+
+The replay screen and the checks catch broken behavior, but they do not answer the main question: are the answers still as good? So the plan asked for two reviews of the final reports:
+
+- **100 judge pairs.** The LLM judge compares a report of the stock model with a report of the pick for the same prompt. It does not see the model names, and it judges each pair twice with A and B swapped. Two different answers count as a tie. I ran the stock model 3 times and the pick 2 times on all 19 held-out prompts, so the 100 pairs grew to 3 × 2 × 19 = 114.
+- **20 blind pairs that I reviewed myself.** A review page showed each pair as A and B, with no run names and in a random order. For each pair, I chose the better report or a tie.
+
+The judge is the stock model itself, so it can prefer its own answers. So I also ran 57 control pairs: each stock run against each other stock run. The same model is on both sides, so a control shows how often the judge prefers one side by chance.
+
+If the two models were equal, each pair with a winner would be a coin flip. A sign test checks if the pick lost more pairs than chance allows (p < 0.05). The pick fails if the judge or my own review finds a loss. No control may fail the same test.
+
+![LLM judge: wins, ties and losses of the pick, and the three controls]({{ site.baseurl }}/images/judge-pairs.svg)
+
+*The judge finds no loss, and the controls find no bias. Each bar shows the share of pairs, and the numbers are pair counts. Against the two older baselines, the pick has 34 wins and 10 losses. Against baseline-3, which ran on the same day as the new runs, it has 10 wins and 9 losses. In a control, a win is a win of the later baseline.*
+
+The pick passed all three rules:
+
+- **LLM judge, 114 pairs:** 44 wins, 51 ties and 19 losses for the pick. The fail line was about 38 losses, so the judge found no loss.
+- **Controls, 57 pairs:** No control failed the test in either direction, so the judge showed no bias toward one side.
+- **My blind review, 20 pairs:** I preferred the pick in 9 pairs and the stock model in 6, with 5 ties. The pick would fail only if I had preferred the stock model in 12 of the 15 decided pairs.
+
+The judge and I agreed on only 9 of the 20 pairs. So the judge is a good check for "no loss" over many pairs, but not for a single pair.
+
+I also read the answers for hard faults. Wrong numbers came up on both sides, so they do not separate the two models. Two faults of the pick looked like effects of the mask: a literal `</s>` in a broken sentence, and a call to a tool that does not exist. On 2026-11-06, I accepted these faults, and the pick passed.
+
+**Lesson:** Read the result as "no loss", not as a gain. Most of the judge wins come from newer market data in the new runs, not from a better model. Against baseline-3, which ran on the same day, the judge gave only 10 wins and 9 losses.
+
+## Step 9: Cut the experts out of the files
+
+The mask hides 56 experts per layer from the router, but vLLM still loads all 216. So the mask model still loads 95.39 GiB. To free that memory, I had to remove the dropped experts from the weight files. My tool `prune_experts.py` reads a mask folder and writes a new folder. It never changes its source.
+
+Three facts made the job simple:
+
+1. Each expert is 12 separate tensors in the file of its layer, so the tool can take them out one by one.
+2. The tool copies those tensors byte for byte, with no new quantization. So the kept experts are exactly the experts that the mask tests measured.
+3. The DSpark draft is a separate folder, and vLLM skips the MTP tensors when it loads the target model. So the prune does not touch the draft, and the stock draft still works.
+
+### New ids for the kept experts
+
+vLLM expects the experts of a layer to have the ids 0 to K − 1, with no gaps. So the 160 kept experts of each layer get new ids: in ascending order, they become 0 to 159. Every tensor that finds an expert by its position must follow the same order:
+
+- **The 43 expert files:** For each layer, the tool writes a new file with the 12 × 160 kept tensors, under their new ids.
+- **The router rows:** `gate.weight` and `gate.bias` keep only the rows of the kept experts, in the same order. The masked −1e4 values leave with the dropped rows.
+- **The hash tables (layers 0 to 2):** Each value in `tid2eid` changes to its new id. The tool stops if it finds a dropped id, because the mask must have moved all of them already.
+
+![New expert ids in layer 3]({{ site.baseurl }}/images/prune-new-ids.svg)
+
+*New ids for the kept experts, from the real keep map of layer 3. The kept ids keep their ascending order and close the gaps: old 3 becomes new 2, old 11 becomes new 7, and old 215 becomes new 159. The router row of each expert (blue bar) moves with it, so the router still scores the same experts. The tool applies one keep map per layer to all 43 layers.*
+
+The tool also sets the expert count to 160 in `config.json` and `quantization_config.json`, because vLLM stops at load if the counts do not match. It also rewrites the weight index and the manifest, which the server checks at every boot.
+
+### The build
+
+Root owns the 43 stock expert files, and only root can read them. So `prune_run.sh` runs the tool in a root container from the server image, with no network, an 8 GB memory limit and the stock folder mounted read-only. The tool streams the tensor bytes and never holds a whole file in memory, so my bot stayed up during the build.
+
+![The prune tool, from the mask folder to the pruned folder]({{ site.baseurl }}/images/prune-tool-pipeline.svg)
+
+*The prune tool. The mask folder rewrote only the router files and links to the stock folder for the expert files, so the tool reads the expert bytes from `data/tp1`. Only root can read them, so the tool runs in a container. Green files hold changed tensor data, and blue JSON files hold new counts and checksums. The dashed box holds the files that did not change: they stay links.*
+
+The build ran on 2026-11-06 from 18:51 to 19:02, about 11 minutes. It rewrote 46 files: the 43 expert files and the 3 files with the router tensors. It removed 28,896 tensors (43 layers × 56 experts × 12 tensors), or 21.27 GiB of tensor data.
+
+### The self-check
+
+A rewrite of this size must be exact. At the end of the build, the tool reads the new folder and the source again, and confirms four points:
+
+1. Each of the 82,560 kept expert tensors (43 × 160 × 12) has the same bytes as its source tensor.
+2. The 5,463 other tensors are also byte-equal to the source.
+3. The router tensors hold the source rows in the keep order, and each new `tid2eid` value maps back to its old value.
+4. The manifest matches every file, and the manifest check from the server image passes.
+
+The self-check passed on the first build. Before the real run, six unit tests ran the tool on a small fake checkpoint. They also confirmed that the tool stops on three faults: a dropped id in `tid2eid`, a bias that is not masked, and one changed byte.
+
+## Step 10: Test boot of the pruned model
+
+The pruned model had one job: to behave exactly like the mask, with the same replay result and the same speed. It needed no new full runs or final review, because the mask had already passed them. On 2026-11-06 at 19:05, a script stopped my live server and booted the pruned model with the stock draft model. It ran the replay screen and the two speed tests, and then it restored the live server.
+
+| | Stock model | Mask (the pick) | Pruned model |
+|---|---|---|---|
+| **Weights loaded** | 95.39 GiB | 95.39 GiB | **74.09 GiB** |
+| **Replay NLL change** | 0 | +2.27% | **+1.89%** |
+| Tool names | 77 of 83 | 79 of 83 | 78 of 83 |
+| Bot test | 33.64 tok/s | 33.98 tok/s | 33.13 tok/s |
+| Code test | 38.86 tok/s | 42.07 tok/s | 40.10 tok/s |
+| **KV cache** | 7.36 GiB (269,629 tokens) | – | **29.76 GiB (1,089,707 tokens)** |
+
+**21.30 GiB less memory.** vLLM printed "Model loading took 74.09 GiB", against 95.39 GiB for the stock model. My estimate from the exact tensor sizes was 74.1 GiB. My cap was about 72 GiB, to leave room for the second model, so the pruned model is 2.09 GiB over it. I accepted that on the same day.
+
+**The same routing.** The pruned model passes the replay screen at +1.89%, even 0.38% lower than the mask. That difference is only 0.15 points over the 0.23% noise floor, and in the better direction. The median change per target (1.92%) is close to the spread between two runs of the stock model (1.64%). A wrong expert map would make the NLL clearly worse: the failed masks cost +3% to +6%. One cause of the small difference is that the SparkInfer kernels choose their tile size from the expert count, so the order of the sums changes.
+
+**The same speed.** Both speed tests are inside the 4.2% noise of the stock model: −1.5% in the bot test and +3.2% in the code test. The code test is 4.7% slower than the mask, but one trial causes that. On the mask, the model wrote the same `cuda_cpp` answer in all 4 runs, and the draft model predicts that text well. The pruned model wrote a different answer in each run. So the text changed, not the speed of the compute.
+
+**The freed memory went to the KV cache.** I kept `GPU_MEMORY_UTILIZATION` at 0.93, so vLLM filled the same memory budget as before. It gave all of the freed memory to the KV cache, which grew from 7.36 GiB to 29.76 GiB: about 4 times as many tokens. That is correct when DeepSeek runs alone. But the freed memory is meant for the second model, and the next step fixes that.
+
+## Step 11: Deploy and pin the KV cache
+
+I deployed the pruned model on 2026-11-06. The bot was down for only 3 min 19 s, and I kept the stock server intact, so a rollback takes three commands.
+
+After the deploy, the KV cache took the memory that the prune freed: 29.8 GiB, room for 1,091,301 tokens. The whole machine had only 2.4 GB left. My bot does not need a cache that large, and the second model needs that memory. So the server had to get smaller in memory, not only on disk.
+
+### The first try: a lower memory budget
+
+My first idea was a lower `GPU_MEMORY_UTILIZATION`. vLLM multiplies this value by the 121.7 GiB of the Spark to get its memory budget. Everything that is left after the weights and the fixed overhead becomes the KV cache. A test boot at 0.73, with a 128k context, failed two times in a row:
+
+```text
+6.54 GiB KV cache is needed, which is larger than the available KV cache memory (5.82 GiB)
+```
+
+At 0.73, the budget is 88.8 GiB. The weights take 74.09 GiB and the fixed overhead (draft model, CUDA graphs, activations, non-torch memory) takes about 8.9 GiB, so only 5.82 GiB is left for the KV cache. vLLM refuses to boot unless the KV cache can hold at least one request of the full context length.
+
+A shorter context does not solve this. At 128k, vLLM needs 6.54 GiB, and at 256k, it needs 6.99 GiB: only 0.45 GiB more. So I kept the 256k context and looked for a different control.
+
+### The fix: set the KV cache size directly
+
+The flag `--kv-cache-memory-bytes` sets the size of the KV cache directly. I added `--kv-cache-memory-bytes 8589934592` to the server flags. vLLM then reserves exactly 8 GiB for the KV cache and skips its own memory estimate.
+
+| | After the deploy | After the pin |
+|---|---|---|
+| **KV cache** | 29.8 GiB | **8 GiB** |
+| **KV cache tokens** | 1,091,301 | **292,952** |
+| Memory used on the machine | 120.6 GB | 100.9 GB |
+| **Memory available** | 2.4 GB | **23.7 GB** |
+
+![The live server before and after the KV cache pin]({{ site.baseurl }}/images/kv-cache-pin.svg)
+
+*The live server before and after `--kv-cache-memory-bytes`. Only the KV cache changed: 29.8 GiB became 8 GiB. The weights stay at 74.09 GiB, and the runtime overhead (draft model, activations, CUDA graphs, non-torch memory) is about 12 GiB after the pin.*
+
+8 GiB is enough for my bot. Its largest session is about 100k tokens, and the 292,952 tokens hold 1.14 requests of the full 256k context. The pin gave back 21.8 GiB, and the machine now has 23.7 GB available for the second model.
+
+With the KV cache pinned, `GPU_MEMORY_UTILIZATION` no longer sets the KV cache size, but vLLM still checks it at boot. vLLM starts only if the free memory is at least that value × 121.69 GiB. On 2026-11-07, more host processes ran, and a restart at 0.93 failed this check. I set the value to 0.90, and the server booted with the same 8 GiB KV cache and 292,952 tokens.
+
+## Step 12: A new draft model
+
+The pruned model still used the stock DSpark draft. The draft model only proposes tokens: the target model checks each one and writes every token that the user sees. So a better draft model changes no output. It only raises the acceptance, the number of draft tokens that the target model accepts per draft. A higher acceptance means fewer passes of the large model per token.
+
+### Why a new draft model
+
+The DSpark draft has its own MTP layer with 64 of the 216 experts. The stock draft chose those 64 by the public REAP rank, and that was a poor fit for my bot. Only 16 of the 64 are among my bot's 64 most used experts in layer 42, and those top 64 carry 68% of the routing weight. The mask had also lowered the acceptance in the bot test, from 2.25 to 2.09.
+
+So I built a new draft model, `dspark-draft-k64-bot`. It keeps the 64 MTP experts with the highest bot rank in layer 42. It has the same size as the stock draft model, 3.0 GB.
+
+### Results
+
+On 2026-11-07, a script booted the live pruned model with the new draft model and ran both speed tests. Then it restored the live server, after 30 minutes of downtime.
+
+| Speed test | Stock draft model | Bot-rank draft model | Speed change | Acceptance change |
+|---|---|---|---|---|
+| Bot test | 33.13 tok/s, 2.05 per draft | 34.50 tok/s, 2.14 per draft | **+4.1%** | **+4.7%** |
+| Code test | 40.10 tok/s, 2.52 per draft | 40.69 tok/s, 2.61 per draft | +1.5% | +3.5% |
+
+![Stock draft against the bot-rank draft on the pruned model]({{ site.baseurl }}/images/draft-test.svg)
+
+*The draft test of 2026-11-07, on the live pruned model. Left: the bot gain (+4.1%) is just inside the grey noise band, and the code gain (+1.5%) is well inside it. Middle and right: the acceptance rose in both tests and at every draft position. So a real, small gain is the most likely result.*
+
+**A small gain, just inside the noise.** The bot test gained 1.37 tok/s, just under the 4.2% noise floor (1.42 tok/s). The code test gain is well inside the noise. My own rule says that a change counts only above the noise, so by that rule, the new draft model does not qualify.
+
+**But the gain is most likely real.** Both tests moved in the same direction. The acceptance also rose at every draft position. The right panel shows the share of drafts in which the target model accepts the token at each position. It rose from 0.78 to 0.80 at position 1, and from 0.22 to 0.24 at position 4.
+
+**And the new draft model costs nothing.** Speculative decoding is lossless, so the new draft model changes no output. It has the same size as the stock draft model. The switch is one mount line in the compose file and a short reboot.
+
+So I switched on 2026-11-07. The bot-rank draft model has been live since 09:17, after 2 min 34 s of downtime. The server came back with the same 74.09 GiB of weights and 292,952 KV cache tokens.
+
+## The final memory savings
+
+I removed 56 of the 216 routed experts in each layer, and I cut the experts per token from 6 to 5. Here is the stock model next to the live model of today:
+
+| | Stock model | Pruned model, live |
+|---|---|---|
+| Routed experts per layer (K) | 216 | 160 |
+| Experts per token (top-k) | 6 | 5 |
+| **Weights loaded** | **95.39 GiB** | **74.09 GiB (−21.30 GiB)** |
+| KV cache | 7.36 GiB (269,629 tokens) | 8 GiB, pinned (292,952 tokens) |
+| Replay NLL change | 0 | +1.89% |
+| Bot test | 33.64 tok/s | 34.50 tok/s |
+| Code test | 38.86 tok/s | 40.69 tok/s |
+
+When I started, only 4 GiB stayed free with the stock model loaded. Now the whole server uses about 94 GiB, and 23.7 GB of host memory stays available. The bot shows no loss that I notice, and the decode speed stayed the same or got faster.
+
+That memory is for the second model of my router. The host (the OS, the gateway, a browser and the CLIs) needs about 5 GiB, and I also want a free margin. That leaves about 12 GiB for the second model with a 10 GiB margin, or about 18 GiB with a 4 GiB margin.
+
+![The 121.7 GiB pool with the pruned server and a second model]({{ site.baseurl }}/images/second-model-room.svg)
+
+*The room for a second model, drawn to scale, with two sizes of free margin. The share of the second model must hold its weights, its KV cache and its CUDA graphs. The values are estimates, and a boot with two models will measure the real ones.*
+
+This is less than the 22 GiB that my first plan assumed, for two reasons. The pruned model is 2.09 GiB over my 72 GiB cap, and the live server needs more runtime memory than its boot profile showed. So a MoE model or a small dense model now fits better than a 4-bit 27B dense model.
+
+## The biggest lessons
+
+1. **A public expert rank is not your traffic.** The REAP rank failed at K 192 (+3.31%). The rank from my bot's own traffic cost only +0.29% at K 176. Rank the experts on the traffic that the model will serve.
+2. **Test with a mask before you rewrite any weights.** A mask hides experts from the router with a bias of −1e4, and it takes about a minute to build. The pruned model then matched the mask within the noise.
+3. **K saves memory, and top-k saves time.** K 160 at top-k 6 decoded 6.4% slower in the bot test, because each token still ran 6 experts. Top-k 5 won the speed back, and top-k 4 cost too much quality (+6.05%).
+4. **A pruned model needs a new look at its draft model.** The mask lowered the bot acceptance from 2.25 to 2.09. A draft model ranked on my bot's traffic won part of it back (+4.7%).
+5. **Measure the noise floor before you read a result.** Two runs of the same model differ by 0.23% in NLL and 4.2% in speed. Without those numbers, I could not read the test boot or the draft test.
+6. **Check the LLM judge with controls.** Three runs of the stock model against itself gave no significant result. Only then did 44 wins and 19 losses mean "no loss".
+7. **Pin the KV cache when two models share memory.** vLLM gives all of its free budget to the KV cache. The flag `--kv-cache-memory-bytes` fixed it at 8 GiB and freed 21.3 GB of host memory.
