@@ -2,7 +2,10 @@
 layout: post
 title: "Pruning DeepSeek V4 Flash 0731 To Save 21GB: A Comprehensive Guide"
 date: 2026-11-11
+image: https://czhou578.github.io/blog/images/pruning_deepseek_thumbnail.png
 ---
+
+![Pruning DeepSeek V4 Flash: 21 GiB freed, 56 of 216 experts cut from every layer]({{ site.baseurl }}/images/pruning_deepseek_thumbnail.png)
 
 I have been working for the past few months with DeepSeek V4 Flash 0731 to primarily run my stock-research bot on my single DGX Spark. It has been amazing to automate the previously tedious research process and have well-researched stock reports deposited into my custom Discord channel every morning.
 
