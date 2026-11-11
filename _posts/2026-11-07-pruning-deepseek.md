@@ -4,9 +4,11 @@ title: "Pruning DeepSeek: A Comprehensive Guide"
 date: 2026-11-07
 ---
 
-I have been working the past few months with DeepSeek v1 Flash 0731 to run my stock-research bot on my single DGX Spark. It has been amazing to automate the previously tedious research in this process and have well researched stock reports deposited into my custom Discord channel every morning.
+I have been working the past few months with DeepSeek v1 Flash 0731 to primarily run my stock-research bot on my single DGX Spark. It has been amazing to automate the previously tedious research process and have well researched stock reports deposited into my custom Discord channel every morning.
 
-Despite this, I have always considered DeepSeek to be the very heavy reasoning model that I can run. Ultimately my DGX Spark is capable of running multiple local models at once, why shouldn't it? 
+![Stock Research Report Sample](image.png)
+
+But ultimately my DGX Spark is capable of running multiple local models at once, why not? 
 
 I have always wanted to create a model router that can intelligently select the best local model for a given task. My idea was to use DeepSeek to serve as a high reasoning model while a smaller model like Qwen could handle simpler tasks. This could also unlock ways to drive Qwen with DeepSeek and so much more.
 
@@ -34,6 +36,10 @@ Here are the original model specs:
 
 *DSpark is a speculative decoding method from DeepSeek. A small draft model proposes a block of tokens in one parallel pass, and a light "Markov head" links each draft token to the token before it. The full model then checks the whole block in one pass and keeps the tokens that it agrees with.*
 
+*EXL3 is the weight format of ExLlamaV3, an open-source library by turboderp for quantizing LLMs and running them on local GPUs. It is a streamlined version of QTIP, a quantization method from Cornell. Plain quantization rounds each weight to the nearest of a few fixed values. EXL3 instead encodes groups of weights with a trellis code and a codebook, so it keeps more quality at a low bitrate. Here, the routed experts use 3.0 bits per weight. Only runtimes built on ExLlamaV3 can load EXL3, such as the custom vLLM build of this project. llama.cpp and Ollama cannot.*
+
+*To learn more about EXL3, start with the [EXL3 section of the ExLlamaV3 README](https://github.com/turboderp-org/exllamav3#exl3-quantization). The QTIP authors explain trellis quantization in a [blog post at together.ai](https://www.together.ai/blog/even-better-even-faster-quantized-llms-with-qtip). Its first sections and its worked example are the easiest parts. The [QTIP paper](https://arxiv.org/abs/2406.11235) has the full details.*
+
 The interesting thing to note is that EXL3 actually makes further pruning cheap. 
 
 Each expert has its own 12 tensors: three matrices (w1, w2, w3), each in four parts (trellis, suh, svh, mcg). One file holds the experts of one layer.
@@ -44,16 +50,16 @@ Each expert has its own 12 tensors: three matrices (w1, w2, w3), each in four pa
 
 The draft model we started with was DSpark, which has 64 MTP experts that reads target layers 40 to 42. 
 
-Each decode step checks 6 tokens: 5 draft tokens and 1 more.
-
-Those 6 tokens per step matter for the key idea of this project: an MoE model has two separate levers.
+Each decode step checks 6 tokens: 5 draft tokens and 1 more. Those 6 tokens per step matter for the key idea of this project: an MoE model has two separate levers.
 
 - **K**, the number of routed experts in each layer, controls memory. The server loads all K experts, so each expert that I remove from every layer frees about 0.4 GiB. It saves almost no time, because each token still reads 6 experts.
 - **Top-k**, the number of experts that each token uses, controls speed. Memory bandwidth (about 273 GB/s) limits the decode on the Spark, so fewer bytes per token give more tokens per second. It saves no memory, because all K experts stay loaded.
 
+How far did K have to go? The second model of my router needs memory too, so I set a cap: the loaded DeepSeek weights must stay at or below about 72 GiB. The stock model loads 95.4 GiB, and each expert slot (one expert in every layer) costs about 0.42 GiB. So I had to drop about 56 slots: 95.4 − 56 × 0.42 ≈ 72 GiB. That leaves 216 − 56 = 160 experts per layer, so my target was K 160.
+
 In each layer, a decode step reads every expert that any of its 6 tokens picks. At K 216 and top-k 6, that is about 34 experts per layer: 13.7 GB per step, plus about 7 GB of static weights. If I cut K to 160, the count only drops to about 33, because 6 tokens × 6 experts can never read more than 36. If I cut top-k to 5, it drops to about 28.
 
-So to free memory without losing speed, I would need to adjust both levers.
+So to free memory without losing speed, I would need to adjust both settings.
 
 ## Building the baseline
 
@@ -63,7 +69,7 @@ I started by building a harness that tells a real loss from run to run noise at 
 
 *The three levels. The left side gives the time per test point, and the right side gives the noise between two runs of the same model. A change counts only if it is larger than the noise of its level.*
 
-The harness reads my bot's own history: 57 recorded sessions with 2,747 messages. Most of the text is tool output, such as SEC filings, web pages and price tables. A script tagged each session with its skill and held out about 30% of the sessions for the tests. The rest became calibration data for the expert rank of Part 2.
+The harness reads my bot's own history: 57 recorded sessions with 2,747 messages. Most of the text is tool output, such as SEC filings, web pages and price tables. A script tagged each session with its skill and reserved about 30% of the sessions for the tests. The rest became calibration data for the expert rank of Part 2.
 
 ### Level 1:
 
@@ -71,9 +77,12 @@ The replay screen sends a recorded context up to an assistant turn, with that re
 
 ```text
 system     You are a stock-research assistant for my portfolio.
+
 user       Give me an update on ACME after its earnings.
+
 assistant  [tool call] get_filing(ticker="ACME", form="10-Q")
 tool       ...Revenue was $4.1 billion, up 12% from a year ago...
+
 assistant  ACME's revenue rose 12% to $4.1 billion.    <- the recorded turn: the screen scores this one
 ```
 
@@ -83,16 +92,16 @@ vLLM returns the log-probability of every token in this prompt, and the screen k
 
 The screen turns these probabilities into one score: the NLL (negative log-likelihood) per token, which is the mean of −ln p over the tokens of the turn. A token that the model expects (p near 1) adds almost nothing, and a surprising token (p near 0) adds a lot. So a lower NLL means that the model finds the recorded reply more likely.
 
-| Token in the recorded turn | p, stock model | p, damaged model |
+| Token in the recorded turn | p, stock model | p, over-pruned model |
 |---|---|---|
 | ` rose` | 0.80 | 0.75 |
 | ` 12` | 0.97 | 0.70 |
 | ` 4.1` | 0.95 | 0.60 |
 | **NLL per token (mean of −ln p)** | **0.10** | **0.39** |
 
-The stock model copies "12" and "4.1" from the tool result with almost no doubt. A model that lost that skill is less sure, so its NLL goes up. The real changes are much smaller than in this toy: the gate is +3% on the total over 45,690 tokens.
+The stock model copies "12" and "4.1" from the tool result confidently. An over-pruned model that lost that skill is less sure, so its NLL goes up. In this section, the NLL is almost four times as high (0.10 to 0.39). A model passes the replay screen only if its NLL rises by at most 3%, measured over all 45,690 tokens of the 60 targets (the recorded turns that the screen scores).
 
-Another target from the same session ends at the tool call. There, the screen also checks if the model ranks the recorded tool name, `get_filing`, as its first choice.
+One session gives more than one target, because the screen scores several of its assistant turns. In the ACME example, the tool call `get_filing(...)` is also a target: there, the prompt stops after the user message and that tool call. For each tool call in a target, the screen also checks the tool name. Every token of `get_filing` must be the model's first choice, so that the model would call the same tool if it wrote the turn itself. The 60 targets hold 83 tool calls, and this check gives the "tool names" score later in the post, such as 77 of 83.
 
 ![Replay noise: the same model, run twice]({{ site.baseurl }}/images/replay-noise.svg)
 
@@ -122,13 +131,23 @@ Each run then goes through five automatic checks. The first four check that the 
 2. **Call order.** The `stock-update` skill must send its two writes and then the save, all in one message. This shows that the model still follows a multi-step instruction exactly.
 3. **Report marker.** The final reply must end with `[[report:FILE]]`, and the file that it names must exist.
 4. **Takes JSON.** The daily report writes its takes to a JSON file. That file must pass the bot's own validator.
-5. **Number fidelity.** Each number in the final report must appear in a tool result of the same session. For a stock bot, this is the check that matters most: a pruned model must not invent a price or a revenue figure.
+5. **Number fidelity.** Each number in the final report must appear in a tool result of the same session. For a stock bot, this is the important check: a pruned model must not invent a price or a revenue figure.
 
-A pairwise LLM judge reads the prompt and two final reports, in random order and without the model names. It answers A, B or tie. It judges each pair twice with the order swapped, and two different answers count as a tie. 
+A pairwise LLM judge reads the prompt and two final reports, without the model names. It answers A, B or tie. It judges each pair twice with the order swapped, and two different answers count as a tie. 
+
+#### Using DeepSeek as its own judge
+
+The judge is not a separate model. It is DeepSeek itself: the stock model on my live server. But a model that grades its own kind of answers brings risks.
+
+1. **Self-preference.** The judge can prefer reports in its own style, so it can favor the stock model. This bias works against the pruned model. If the pruned model in this case still does not lose, the result holds.
+2. **Position bias.** Without thinking, the judge picked position A in both orders for 9 of 15 pairs. A short written comparison before the answer did not help (11 of 15). The judge now thinks before it answers, and each pair runs in both orders. A win or a loss counts only if it survives the swap.
+3. **Noise.** Two runs of the same stock model already gave a net loss of 13% to 20%. So in the full runs, the judge only reports and does not gate. In the final review (Step 8), it gets a pass rule: a sign test over many pairs. Control pairs of the stock model against itself show how much the judge moves by chance.
+
+The judge never decides alone. It is one check next to the automatic checks and my own blind review.
 
 ### The gates
 
-Here are the gates of all three levels. A test point must pass the gates of one level before it goes to the next:
+Here are the gates (requirements) of all three levels. A test point must pass the gates of one level before it goes to the next:
 
 | Level | Metric | Gate |
 |---|---|---|
@@ -148,15 +167,13 @@ Things I learned:
 3. **Core dumps filled the disk.** A headless browser crashed in the sandbox and wrote four core dumps, the largest 1.22 TB. Now each sandbox container gets `--ulimit core=0`, `--shm-size 1g` and `--memory 3g`.
 4. **The memory watch worked.** Free memory fell from 2,185 MB to 380 MB in one minute. The watch stopped the replay, and the script restored the live server.
 
-**Lesson:** Keep the way back separate from the thing that can fail, and write the safety rules in code.
+**Lesson:** Each test boot stops my live bot, so the way back (the restore of the live server) must not depend on the thing under test. The safety rules (the deadlines, the memory watch and the restore) live in code, not only in a prompt.
 
 ## Finding the right size
 
-I tested each size with a mask before I changed a single weight file. 
+I tested each size with a **mask** before I changed a single weight file. 
 
-The mask is an abstraction that hides some experts from the model router, but doesn't delete them. 
-
-A real prune would immediately be hours of work and would rewrite about 43 files, each 2GB.
+The mask is an abstraction that hides some experts from the model router, but doesn't delete them. A real prune would immediately be hours of work and would rewrite about 43 files, each 2GB.
 
 Changing only the small routing tensors allows us to test many sizes like K = 192, 176, 160 etc very cheaply. 
 
@@ -182,17 +199,12 @@ tid2eid, layer 0 (made-up ids)
   ...
 ```
 
-For token 4517, layer 0 always runs these specific experts in every sentence. 
+For token 4517, layer 0 always runs these 6 experts, in every sentence. The bias trick from layers 3 to 42 does not work here: the table sends the token's work to its experts, whatever their bias is.
 
-The bias trick from earlier doesn't work here because the table will send a token's work to that expert regardless.
+The tool edits this table instead. Each entry for a dropped expert moves to the kept expert with the most similar router row. That kept expert must pass two rules:
 
-The tool edits this table. Each entry for a dropped expert moves to the kept expert with the most similar router row. 
-
-There are two rules that must be followed:
-
-That expert must not already be in the same row.
-
-The load of the new expert must stay below twice the mean. Otherwise a few "central" experts take the slots of many dropped experts. Without this rule, one expert got 12 times the median load at K 160.
+1. **It is not already in the same row.**
+2. **Its load stays below twice the mean.** Otherwise a few "central" experts take the slots of many dropped experts. Without this rule, one expert got 12 times the median load at K 160.
 
 ```text
 before:  token 4517  →  [12, 87, 140, 205, 63, 9]     205 is dropped
@@ -225,33 +237,31 @@ Then I ran each mask through the replay screen. The NLL measures how surprised t
 
 *Both REAP masks fail the NLL gate. The replay screen on 60 held-out targets. K 176 ran on 58 of 60 targets, and its baseline was cut to the same 58. Sources: `mask-k192-compare.txt`, `mask-k176-compare.txt`.*
 
-Even the smallest cut failed. K 192 drops 24 experts per layer, and its NLL rose from 0.4440 to 0.4587: +3.31%, just over the gate. K 176 drops 40 experts per layer, and its NLL rose by 6.31%, about twice as much. The change at K 192 is 14 times the 0.23% noise floor, so it is a real loss, not noise.
+Even the smallest cut failed. K 192 drops 24 experts per layer, and its NLL rose from 0.4440 to 0.4587: +3.31%, just over the gate. K 176 drops 40 experts per layer, and its NLL rose by 6.31%, about twice as much. The change at K 192 is 14 times the 0.23% noise floor, so it is a real loss. 
 
-The tool names held at both sizes: 78 of 83 at K 192, and 74 of 80 at K 176 (its 58 targets had 80 tool calls). So the masked model still picked the right tools. It only found the bot's replies less likely.
+The tool names held at both sizes: 78 of 83 at K 192, and 74 of 80 at K 176 (its 58 targets had 80 tool calls). The masked model still picked the right tools, but it found the bot's replies less likely.
 
-The loss doubled from K 192 to K 176, so I stopped there. K 160, the size that I needed, was out of reach with this rank.
+The loss doubled from K 192 to K 176, so I stopped there. K 160 drops even more experts, so with this rank it would cost even more. The REAP rank could not take me to the size that I needed.
 
 Why did REAP do so badly? Its rank came from code, math, science and tool-call data. My bot reads earnings reports, SEC filings and web pages, so the REAP rank dropped some experts that my bot actually uses. The next step was to rank the experts on my bot's own traffic.
 
 ## Step 6: Rank Experts on my bot's traffic
 
-The REAP rank measures the experts that the model uses on a general-purpose dataset. 
-
-I wanted to measure the experts that my bot actually uses, so I built a new rank. 
+The REAP rank measures the experts that the model uses on a general-purpose dataset. I wanted to measure the experts that my bot actually uses, so I built a new rank. 
 
 The first step was to boot `compose-capture.yml`, which starts vLLM in a special mode for the capture.
 
-The goal is to see which experts the unchanged model uses on your bot's traffic. So all 216 experts must be available to the router.
+The goal was to see which experts the unchanged model uses on the bot's traffic, so all 216 experts must be available to the router.
 
-vLLM's Model Runner V1 allows us to define a capture flag, which is `--capture-return-routed-experts` which keeps each choice of experts for each token in each layer, and sends it back in the reply. 
+vLLM's Model Runner V1 allowed me to define a capture flag, which is `--capture-return-routed-experts` which keeps each choice of experts for each token in each layer, and send it back in the reply. 
 
 There is no DSpark draft in this step. 
 
-Next, I have a custom Python script that sends the 57 recorded sessions to the model, and collects the routed experts for each token in each layer.
+Next, I had a custom Python script that sent the 57 recorded sessions to the model, and collected the routed experts for each token in each layer.
 
-The script uses the 34 segments of the calibration split. These are the sessions that the replay screen does not use. If the rank and the test used the same sessions, the replay screen would grade the rank on the data that made it. The test would then look better than the truth.
+The script uses the 34 segments of the calibration split. These are the sessions that the replay screen does not use. If the rank and the test used the same sessions, the replay screen would grade the rank on the data that made it, skewing results.
 
-Each request holds the recorded context up to the last target turn, as in the replay screen. That is the system prompt, the user messages, the tool calls, the tool results (SEC filings, web pages, price tables) and the assistant turns.
+Each request holds the recorded context up to the last target turn, as in the replay screen. That includes the system prompt, the user messages, the tool calls, the tool results (SEC filings, web pages, price tables) and the assistant turns.
 
 The server writes only one new token and stops. Before that token, it must read the full prompt through all 43 layers. During this read, the router picks 6 experts for every prompt token in every layer, and the capture records all of those picks. The script then ignores the one generated token.
 
@@ -275,6 +285,10 @@ Finally, the script writes everything to `expert_rank_bot.json`:
 - **Totals:** the prompt tokens, the counted tokens and the unfilled rows.
 
 The mask tool reads this file the same way it read the REAP rank: for a mask with K experts, it drops the 216 − K experts at the bottom of each layer's list.
+
+![Kept and dropped experts in four layers, ordered by the bot use]({{ site.baseurl }}/images/expert-use-four-layers.svg)
+
+*Four layers, expert by expert. The bars show how often my bot's router picks each expert, most used on the left. The violet drops of the bot rank sit at the right end, in the tail that the bot hardly uses. A few gaps there are the protected tool experts, which never drop. The orange row marks the experts that the REAP mask drops at K 192: some are among the most used experts of the layer. Layer 37 has the largest REAP share of the 40 layers.*
 
 The capture boot takes my live bot offline, so I made the script easy to resume. Each segment writes one line of counts to an output file, and a rerun skips the segments that are already done. A separate pass then adds up the lines into the JSON file. Later, I also extended the script to rank the experts by router weight, but this step used the plain count.
 
@@ -329,11 +343,11 @@ I cut top-k, the number of routed experts that each token uses. First I built a 
 
 My tool `topk_checkpoint.py` copies a mask folder and changes the number of experts per token. It changes no expert weights. vLLM reads top-k from one number in `config.json`, `num_experts_per_tok`, so the tool sets that number to the new top-k. In every layer, top-k 5 means the same thing: each token loses the weakest of its 6 experts.
 
-In layers 3 to 42, the config change is enough. The router now takes its top 5 in place of its top 6, so it drops the expert that was 6th. vLLM then renormalizes the weights of the 5 kept experts, so they add up to the same total as the 6 did. The mask bias still keeps the dropped experts out.
+In layers 3 to 42, the config change is enough. The router now takes its top 5 in place of its top 6. vLLM then renormalizes the weights of the 5 kept experts, so they add up to the same total as the 6 did. The mask bias still keeps the dropped experts out.
 
 Layers 0 to 2 need more work. vLLM expects the `tid2eid` table to have one column for each expert of a token, so (129,280, 5) now. The file still holds 6 columns, so the boot would fail with a shape mismatch. The tool must drop one id from each row.
 
-The column position means nothing, so the tool drops the id with the smallest router weight, the same rule as in the other layers. But the real weight depends on the input to the layer, and attention mixes the earlier tokens into that input. So one token id gets a different input in every sentence, but the table has only one row for it. The tool uses an estimate: it puts the token's own embedding in place of the real input, and drops the id with the lowest score.
+The column position means nothing, so the tool drops the id with the smallest router weight, the same rule as in the other layers. The real weight depends on the input to the layer, and attention mixes the earlier tokens into that input. One token id gets a different input in every sentence, but the table has only one row for it. The tool uses an estimate: it puts the token's own embedding in place of the real input, and drops the id with the lowest score.
 
 ```text
 token "price", layer 0 (made-up numbers)
@@ -342,12 +356,12 @@ est. score:  [1.4,  0.9,  1.6,  0.5,  1.2,  1.1 ]
 row after:   [ 17,   92,  140,       201,   63 ]   <- id 5 has the lowest score
 ```
 
-By the same estimate, the dropped expert carried about 12 to 13% of a token's routing weight in these layers. With 6 equal weights, each expert would carry 16.7%. So the tool drops a weaker expert than average, but not one with zero weight.
+By the same estimate, the dropped expert carried about 12 to 13% of a token's routing weight in these layers. With 6 equal weights, each expert would carry 16.7%. Thus, the tool drops a weaker expert than average, but not one with zero weight.
 
 Then the tool writes the new folder:
 
 1. It rewrites the one file that holds the 3 tables (4.28 GB) with the new table shapes. The other 495 tensors in that file stay byte for byte the same.
-2. It links the other files, such as the 43 expert files of about 88 GB, in place of a copy. So one folder takes only about 35 seconds.
+2. It links the other files, such as the 43 expert files of about 88 GB, in place of a copy so one folder takes only about 35 seconds.
 3. It runs a self-check: each new row holds only ids from the old row, and every other tensor has the same bytes as before.
 
 ```bash
@@ -360,7 +374,7 @@ Each boot loaded the new tables with no error, and the EXL3 runtime line showed 
 
 Top-k takes only whole numbers, so I had three values to test: 6, 5 and 4. Before any test, I estimated that top-k 5 would decode about 9% faster than top-k 6, and top-k 4 about 21% faster. But each expert that a token loses also costs some quality, and I could not predict how much. So I measured it.
 
-I wrote down the rules for the pick before the test, so that the results could not change them:
+I wrote down the rules for the pick before the test:
 
 1. Drop each point that fails a gate.
 2. From the rest, take the fastest point. Two speeds within the 4.2% noise count as equal.
@@ -390,9 +404,7 @@ So 5 is the smallest top-k that stays inside the quality gate, and the rules pic
 
 The last row, K 216 at top-k 5 with no mask, answers one more question: does the mask make the top-k cut worse? The memory watch stopped this replay at 35 of 60 targets, and the speed tests did not run. So I compared the points on those 35 targets only. There, top-k 5 alone cost +1.29%, and the mask alone cost +1.24%. Both together cost +2.50%, about the sum of the two. So the two costs simply add up, and neither change makes the other one worse.
 
-**Lesson:** The number of experts per layer sets the size. The number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster.
-
-The number of experts per layer sets the size. The number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster, and a draft model for speculative decoding loses acceptance when the target changes.
+**Lesson:** The number of experts per layer sets the size while the number of experts per token sets the speed. A pruned MoE model needs both changes to be smaller and faster.
 
 ## Step 8: Full runs and the final review
 
@@ -402,12 +414,12 @@ The full run on 2026-11-05 sent 15 bot prompts through the real agent. All 15 fi
 
 ### The final review: 100 judge pairs and 20 blind pairs
 
-The replay screen and the checks catch broken behavior, but they do not answer the main question: are the answers still as good? So the plan asked for two reviews of the final reports:
+The replay screen and the checks catch broken behavior, but they do not answer the main question: are the answers still as good? To investigate, I did the following:
 
 - **100 judge pairs.** The LLM judge compares a report of the stock model with a report of the pick for the same prompt. It does not see the model names, and it judges each pair twice with A and B swapped. Two different answers count as a tie. I ran the stock model 3 times and the pick 2 times on all 19 held-out prompts, so the 100 pairs grew to 3 × 2 × 19 = 114.
 - **20 blind pairs that I reviewed myself.** A review page showed each pair as A and B, with no run names and in a random order. For each pair, I chose the better report or a tie.
 
-The judge is the stock model itself, so it can prefer its own answers. So I also ran 57 control pairs: each stock run against each other stock run. The same model is on both sides, so a control shows how often the judge prefers one side by chance.
+The judge is the stock model itself, so it can prefer its own answers. To remedy this, I also ran 57 control pairs: each stock run against each other stock run. The same model is on both sides, so a control shows how often the judge prefers one side by chance.
 
 If the two models were equal, each pair with a winner would be a coin flip. A sign test checks if the pick lost more pairs than chance allows (p < 0.05). The pick fails if the judge or my own review finds a loss. No control may fail the same test.
 
@@ -421,7 +433,7 @@ The pick passed all three rules:
 - **Controls, 57 pairs:** No control failed the test in either direction, so the judge showed no bias toward one side.
 - **My blind review, 20 pairs:** I preferred the pick in 9 pairs and the stock model in 6, with 5 ties. The pick would fail only if I had preferred the stock model in 12 of the 15 decided pairs.
 
-The judge and I agreed on only 9 of the 20 pairs. So the judge is a good check for "no loss" over many pairs, but not for a single pair.
+The judge and I agreed on only 9 of the 20 pairs, so it turns out the judge is a good check for "no loss" over many pairs, but not for a single pair.
 
 I also read the answers for hard faults. Wrong numbers came up on both sides, so they do not separate the two models. Two faults of the pick looked like effects of the mask: a literal `</s>` in a broken sentence, and a call to a tool that does not exist. On 2026-11-06, I accepted these faults, and the pick passed.
 
@@ -435,11 +447,11 @@ Three facts made the job simple:
 
 1. Each expert is 12 separate tensors in the file of its layer, so the tool can take them out one by one.
 2. The tool copies those tensors byte for byte, with no new quantization. So the kept experts are exactly the experts that the mask tests measured.
-3. The DSpark draft is a separate folder, and vLLM skips the MTP tensors when it loads the target model. So the prune does not touch the draft, and the stock draft still works.
+3. The DSpark draft is a separate folder, and vLLM skips the MTP tensors when it loads the target model. The prune does not touch the draft.
 
 ### New ids for the kept experts
 
-vLLM expects the experts of a layer to have the ids 0 to K − 1, with no gaps. So the 160 kept experts of each layer get new ids: in ascending order, they become 0 to 159. Every tensor that finds an expert by its position must follow the same order:
+vLLM expects the experts of a layer to have the ids 0 to K − 1, with no gaps. The 160 kept experts of each layer get new ids: in ascending order, they become 0 to 159. Every tensor that finds an expert by its position must follow the same order:
 
 - **The 43 expert files:** For each layer, the tool writes a new file with the 12 × 160 kept tensors, under their new ids.
 - **The router rows:** `gate.weight` and `gate.bias` keep only the rows of the kept experts, in the same order. The masked −1e4 values leave with the dropped rows.
@@ -453,7 +465,7 @@ The tool also sets the expert count to 160 in `config.json` and `quantization_co
 
 ### The build
 
-Root owns the 43 stock expert files, and only root can read them. So `prune_run.sh` runs the tool in a root container from the server image, with no network, an 8 GB memory limit and the stock folder mounted read-only. The tool streams the tensor bytes and never holds a whole file in memory, so my bot stayed up during the build.
+Root owns the 43 stock expert files, and only root can read them. So `prune_run.sh` runs the tool in a root container from the server image, with no network, an 8 GB memory limit and the stock folder mounted read-only.
 
 ![The prune tool, from the mask folder to the pruned folder]({{ site.baseurl }}/images/prune-tool-pipeline.svg)
 
@@ -489,7 +501,7 @@ The pruned model had one job: to behave exactly like the mask, with the same rep
 
 **The same routing.** The pruned model passes the replay screen at +1.89%, even 0.38% lower than the mask. That difference is only 0.15 points over the 0.23% noise floor, and in the better direction. The median change per target (1.92%) is close to the spread between two runs of the stock model (1.64%). A wrong expert map would make the NLL clearly worse: the failed masks cost +3% to +6%. One cause of the small difference is that the SparkInfer kernels choose their tile size from the expert count, so the order of the sums changes.
 
-**The same speed.** Both speed tests are inside the 4.2% noise of the stock model: −1.5% in the bot test and +3.2% in the code test. The code test is 4.7% slower than the mask, but one trial causes that. On the mask, the model wrote the same `cuda_cpp` answer in all 4 runs, and the draft model predicts that text well. The pruned model wrote a different answer in each run. So the text changed, not the speed of the compute.
+**The same speed.** Both speed tests are inside the 4.2% noise of the stock model: −1.5% in the bot test and +3.2% in the code test. The code test is 4.7% slower than the mask, due to one trial. On the mask, the model wrote the same `cuda_cpp` answer in all 4 runs, and the draft model predicts that text well. The pruned model wrote a different answer in each run.
 
 **The freed memory went to the KV cache.** I kept `GPU_MEMORY_UTILIZATION` at 0.93, so vLLM filled the same memory budget as before. It gave all of the freed memory to the KV cache, which grew from 7.36 GiB to 29.76 GiB: about 4 times as many tokens. That is correct when DeepSeek runs alone. But the freed memory is meant for the second model, and the next step fixes that.
 
@@ -497,7 +509,7 @@ The pruned model had one job: to behave exactly like the mask, with the same rep
 
 I deployed the pruned model on 2026-11-06. The bot was down for only 3 min 19 s, and I kept the stock server intact, so a rollback takes three commands.
 
-After the deploy, the KV cache took the memory that the prune freed: 29.8 GiB, room for 1,091,301 tokens. The whole machine had only 2.4 GB left. My bot does not need a cache that large, and the second model needs that memory. So the server had to get smaller in memory, not only on disk.
+After the deploy, the KV cache took the memory that the prune freed: 29.8 GiB, room for 1,091,301 tokens. The whole machine had only 2.4 GB left. My bot does not need a cache that large, and the second model needs that memory.
 
 ### The first try: a lower memory budget
 
@@ -509,7 +521,7 @@ My first idea was a lower `GPU_MEMORY_UTILIZATION`. vLLM multiplies this value b
 
 At 0.73, the budget is 88.8 GiB. The weights take 74.09 GiB and the fixed overhead (draft model, CUDA graphs, activations, non-torch memory) takes about 8.9 GiB, so only 5.82 GiB is left for the KV cache. vLLM refuses to boot unless the KV cache can hold at least one request of the full context length.
 
-A shorter context does not solve this. At 128k, vLLM needs 6.54 GiB, and at 256k, it needs 6.99 GiB: only 0.45 GiB more. So I kept the 256k context and looked for a different control.
+A shorter context does not solve this. At 128k, vLLM needs 6.54 GiB, and at 256k, it needs 6.99 GiB: only 0.45 GiB more. I kept the 256k context and looked for a different control.
 
 ### The fix: set the KV cache size directly
 
@@ -532,13 +544,13 @@ With the KV cache pinned, `GPU_MEMORY_UTILIZATION` no longer sets the KV cache s
 
 ## Step 12: A new draft model
 
-The pruned model still used the stock DSpark draft. The draft model only proposes tokens: the target model checks each one and writes every token that the user sees. So a better draft model changes no output. It only raises the acceptance, the number of draft tokens that the target model accepts per draft. A higher acceptance means fewer passes of the large model per token.
+The pruned model still used the stock DSpark draft. The draft model only proposes tokens: the target model checks each one and writes every token that the user sees. A better draft model changes no output. It only raises the acceptance, the number of draft tokens that the target model accepts per draft. A higher acceptance means fewer passes of the large model per token.
 
 ### Why a new draft model
 
 The DSpark draft has its own MTP layer with 64 of the 216 experts. The stock draft chose those 64 by the public REAP rank, and that was a poor fit for my bot. Only 16 of the 64 are among my bot's 64 most used experts in layer 42, and those top 64 carry 68% of the routing weight. The mask had also lowered the acceptance in the bot test, from 2.25 to 2.09.
 
-So I built a new draft model, `dspark-draft-k64-bot`. It keeps the 64 MTP experts with the highest bot rank in layer 42. It has the same size as the stock draft model, 3.0 GB.
+Instead, I built a new draft model, `dspark-draft-k64-bot`. It keeps the 64 MTP experts with the highest bot rank in layer 42. It has the same size as the stock draft model, 3.0 GB.
 
 ### Results
 
@@ -594,3 +606,11 @@ This is less than the 22 GiB that my first plan assumed, for two reasons. The pr
 5. **Measure the noise floor before you read a result.** Two runs of the same model differ by 0.23% in NLL and 4.2% in speed. Without those numbers, I could not read the test boot or the draft test.
 6. **Check the LLM judge with controls.** Three runs of the stock model against itself gave no significant result. Only then did 44 wins and 19 losses mean "no loss".
 7. **Pin the KV cache when two models share memory.** vLLM gives all of its free budget to the KV cache. The flag `--kv-cache-memory-bytes` fixed it at 8 GiB and freed 21.3 GB of host memory.
+
+Thanks for reading! I will continue to be finding interesting ways to prune and optimize my local models in the future, and who knows if DeepSeek can be made even more efficient! If you have any questions or suggestions, feel free to reach out.
+
+My code is in this repo: [czhou578/dsv4-specialize](https://github.com/czhou578/dsv4-specialize#files). Its "Files" section lists the weight tools, the expert capture, the test boots and the run scripts of this post.
+
+The tool that built the bot-rank draft model of Step 12 is in the server repo: [`build_dspark_draft.py`](https://github.com/MiaAI-Lab/DeepSeek-v4-Flash-One-DGX-Spark/blob/main/image-patch/build_dspark_draft.py).
+
+The eval harness (the replay screen, the speed tests, the full runs and the LLM judge) is in my bot's repo, which is private.
