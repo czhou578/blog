@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "Pruning DeepSeek: A Comprehensive Guide"
+title: "Pruning DeepSeek V4 Flash 0731 To Save 21GB: A Comprehensive Guide"
 date: 2026-11-07
 ---
 
