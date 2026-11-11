@@ -1,7 +1,7 @@
 ---
 layout: post
 title: "Pruning DeepSeek V4 Flash 0731 To Save 21GB: A Comprehensive Guide"
-date: 2026-11-07
+date: 2026-11-11
 ---
 
 I have been working for the past few months with DeepSeek V4 Flash 0731 to primarily run my stock-research bot on my single DGX Spark. It has been amazing to automate the previously tedious research process and have well-researched stock reports deposited into my custom Discord channel every morning.
