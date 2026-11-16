@@ -2,7 +2,10 @@
 layout: post
 title: "Pruning DeepSeek v4 Flash 0731: Removing cold experts"
 date: 2026-11-11
+image: https://czhou578.github.io/blog/images/pruning_deepseek_cold_experts_thumbnail.png
 ---
+
+![Pruning DeepSeek V4 Flash, part 2: 69.8 GiB, 486 cold experts cut, most of them on a "never delete" list]({{ site.baseurl }}/images/pruning_deepseek_cold_experts_thumbnail.png)
 
 In my [last post]({{ site.baseurl }}{% post_url 2026-11-07-pruning-deepseek %}), I pruned DeepSeek V4 Flash 0731 from 216 to 160 routed experts per layer, with a rank that came from my stock-research bot's own traffic. The pruned model loaded 74.09 GiB of weights, 21.30 GiB less than the stock model.
 
