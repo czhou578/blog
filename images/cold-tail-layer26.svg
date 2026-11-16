@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="-16 -16 792 452" width="792" height="452" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Layer 26: the 160 kept experts by weight share, with the mandatory tool experts</title>
+<desc>One bar per kept expert of layer 26, sorted by its share of the layer's routing weight on a log scale. The 17 coldest experts are all mandatory tool experts. MD drops 15 of them and 5 cold ordinary experts.</desc>
+<style>.s-ink{fill:#131A2E}.s-muted{fill:#56617B}.s-surface{fill:#FFFFFF}.s-bg{fill:#F3F5FA}.s-line{fill:#D8DDEA}.s-ok{fill:#1F7A36}.s-bad{fill:#C42B2B}.s-warn{fill:#9A6200}.s-goal{fill:#6B4E16}.s-measure{fill:#0B7F86}.s-reap{fill:#C2410C}.s-bot{fill:#5B45D6}.s-topk{fill:#A86A00}.s-review{fill:#B02A6B}.s-prune{fill:#237A3B}.s-ship{fill:#1D63C4}.st-ink{stroke:#131A2E;fill:none}.st-muted{stroke:#56617B;fill:none}.st-line{stroke:#D8DDEA;fill:none}.st-ok{stroke:#1F7A36;fill:none}.st-bad{stroke:#C42B2B;fill:none}.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}.t-w{fill:#FFFFFF}</style>
+<rect x="-15.5" y="-15.5" width="791" height="451" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<line x1="86.0" y1="40.0" x2="746.0" y2="40.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="78.0" y="44.0" class="t-s" text-anchor="end">10%</text>
+<line x1="86.0" y1="105.0" x2="746.0" y2="105.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="78.0" y="109.0" class="t-s" text-anchor="end">1%</text>
+<line x1="86.0" y1="170.0" x2="746.0" y2="170.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="78.0" y="174.0" class="t" text-anchor="end">0.1%</text>
+<line x1="86.0" y1="235.0" x2="746.0" y2="235.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="78.0" y="239.0" class="t-s" text-anchor="end">0.01%</text>
+<line x1="86.0" y1="300.0" x2="746.0" y2="300.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="78.0" y="304.0" class="t-s" text-anchor="end">0.001%</text>
+<text x="-4.0" y="20.0" class="t-s" text-anchor="start">Share of the layer's routing weight (log scale)</text>
+<rect x="86.4" y="49.4" width="3.3" height="250.6" rx="0" style="fill: #C2410C"><title>Rank 1: 7.1761% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="90.5" y="55.5" width="3.3" height="244.5" rx="0" style="fill: #5B45D6"><title>Rank 2: 5.7744% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="94.7" y="59.6" width="3.3" height="240.4" rx="0" style="fill: #5B45D6"><title>Rank 3: 4.9893% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="98.8" y="73.8" width="3.3" height="226.2" rx="0" style="fill: #C2410C"><title>Rank 4: 3.0237% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="102.9" y="82.5" width="3.3" height="217.5" rx="0" style="fill: #C2410C"><title>Rank 5: 2.2202% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="107.0" y="89.5" width="3.3" height="210.5" rx="0" style="fill: #5B45D6"><title>Rank 6: 1.7325% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="111.2" y="89.6" width="3.3" height="210.4" rx="0" style="fill: #C2410C"><title>Rank 7: 1.7233% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="115.3" y="91.3" width="3.3" height="208.7" rx="0" style="fill: #5B45D6"><title>Rank 8: 1.6237% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="119.4" y="91.7" width="3.3" height="208.3" rx="0" style="fill: #5B45D6"><title>Rank 9: 1.6000% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="123.5" y="93.1" width="3.3" height="206.9" rx="0" style="fill: #5B45D6"><title>Rank 10: 1.5239% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="127.7" y="93.9" width="3.3" height="206.1" rx="0" style="fill: #C2410C"><title>Rank 11: 1.4794% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="131.8" y="95.2" width="3.3" height="204.8" rx="0" style="fill: #5B45D6"><title>Rank 12: 1.4158% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="135.9" y="95.4" width="3.3" height="204.6" rx="0" style="fill: #5B45D6"><title>Rank 13: 1.4069% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="140.0" y="96.1" width="3.3" height="203.9" rx="0" style="fill: #5B45D6"><title>Rank 14: 1.3709% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="144.2" y="99.3" width="3.3" height="200.7" rx="0" style="fill: #5B45D6"><title>Rank 15: 1.2218% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="148.3" y="99.9" width="3.3" height="200.1" rx="0" style="fill: #C2410C"><title>Rank 16: 1.1974% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="152.4" y="100.1" width="3.3" height="199.9" rx="0" style="fill: #5B45D6"><title>Rank 17: 1.1893% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="156.5" y="100.6" width="3.3" height="199.4" rx="0" style="fill: #5B45D6"><title>Rank 18: 1.1692% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="160.7" y="101.0" width="3.3" height="199.0" rx="0" style="fill: #C2410C"><title>Rank 19: 1.1528% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="164.8" y="101.7" width="3.3" height="198.3" rx="0" style="fill: #C2410C"><title>Rank 20: 1.1242% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="168.9" y="102.6" width="3.3" height="197.4" rx="0" style="fill: #C2410C"><title>Rank 21: 1.0903% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="173.0" y="102.8" width="3.3" height="197.2" rx="0" style="fill: #5B45D6"><title>Rank 22: 1.0829% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="177.2" y="105.3" width="3.3" height="194.7" rx="0" style="fill: #5B45D6"><title>Rank 23: 0.9909% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="181.3" y="105.4" width="3.3" height="194.6" rx="0" style="fill: #5B45D6"><title>Rank 24: 0.9871% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="185.4" y="107.6" width="3.3" height="192.4" rx="0" style="fill: #5B45D6"><title>Rank 25: 0.9107% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="189.5" y="107.8" width="3.3" height="192.2" rx="0" style="fill: #C2410C"><title>Rank 26: 0.9064% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="193.7" y="108.1" width="3.3" height="191.9" rx="0" style="fill: #5B45D6"><title>Rank 27: 0.8962% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="197.8" y="109.4" width="3.3" height="190.6" rx="0" style="fill: #5B45D6"><title>Rank 28: 0.8548% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="201.9" y="109.8" width="3.3" height="190.2" rx="0" style="fill: #5B45D6"><title>Rank 29: 0.8425% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="206.0" y="110.2" width="3.3" height="189.8" rx="0" style="fill: #5B45D6"><title>Rank 30: 0.8323% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="210.2" y="110.2" width="3.3" height="189.8" rx="0" style="fill: #C2410C"><title>Rank 31: 0.8319% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="214.3" y="110.7" width="3.3" height="189.3" rx="0" style="fill: #C2410C"><title>Rank 32: 0.8180% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="218.4" y="111.4" width="3.3" height="188.6" rx="0" style="fill: #5B45D6"><title>Rank 33: 0.7963% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="222.5" y="111.5" width="3.3" height="188.5" rx="0" style="fill: #5B45D6"><title>Rank 34: 0.7941% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="226.7" y="111.8" width="3.3" height="188.2" rx="0" style="fill: #C2410C"><title>Rank 35: 0.7858% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="230.8" y="113.0" width="3.3" height="187.0" rx="0" style="fill: #5B45D6"><title>Rank 36: 0.7543% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="234.9" y="113.9" width="3.3" height="186.1" rx="0" style="fill: #C2410C"><title>Rank 37: 0.7304% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="239.0" y="114.0" width="3.3" height="186.0" rx="0" style="fill: #5B45D6"><title>Rank 38: 0.7258% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="243.2" y="114.2" width="3.3" height="185.8" rx="0" style="fill: #5B45D6"><title>Rank 39: 0.7222% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="247.3" y="114.2" width="3.3" height="185.8" rx="0" style="fill: #5B45D6"><title>Rank 40: 0.7217% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="251.4" y="114.8" width="3.3" height="185.2" rx="0" style="fill: #5B45D6"><title>Rank 41: 0.7079% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="255.5" y="115.2" width="3.3" height="184.8" rx="0" style="fill: #5B45D6"><title>Rank 42: 0.6979% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="259.6" y="115.4" width="3.3" height="184.6" rx="0" style="fill: #C2410C"><title>Rank 43: 0.6916% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="263.8" y="115.5" width="3.3" height="184.5" rx="0" style="fill: #5B45D6"><title>Rank 44: 0.6888% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="267.9" y="116.3" width="3.3" height="183.7" rx="0" style="fill: #C2410C"><title>Rank 45: 0.6694% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="272.0" y="116.4" width="3.3" height="183.6" rx="0" style="fill: #5B45D6"><title>Rank 46: 0.6682% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="276.1" y="116.7" width="3.3" height="183.3" rx="0" style="fill: #5B45D6"><title>Rank 47: 0.6604% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="280.3" y="116.9" width="3.3" height="183.1" rx="0" style="fill: #5B45D6"><title>Rank 48: 0.6562% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="284.4" y="117.3" width="3.3" height="182.7" rx="0" style="fill: #5B45D6"><title>Rank 49: 0.6476% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="288.5" y="118.1" width="3.3" height="181.9" rx="0" style="fill: #5B45D6"><title>Rank 50: 0.6278% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="292.6" y="118.8" width="3.3" height="181.2" rx="0" style="fill: #5B45D6"><title>Rank 51: 0.6143% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="296.8" y="119.2" width="3.3" height="180.8" rx="0" style="fill: #5B45D6"><title>Rank 52: 0.6051% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="300.9" y="119.3" width="3.3" height="180.7" rx="0" style="fill: #5B45D6"><title>Rank 53: 0.6032% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="305.0" y="119.3" width="3.3" height="180.7" rx="0" style="fill: #5B45D6"><title>Rank 54: 0.6023% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="309.1" y="119.5" width="3.3" height="180.5" rx="0" style="fill: #5B45D6"><title>Rank 55: 0.5982% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="313.3" y="119.9" width="3.3" height="180.1" rx="0" style="fill: #5B45D6"><title>Rank 56: 0.5907% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="317.4" y="120.9" width="3.3" height="179.1" rx="0" style="fill: #5B45D6"><title>Rank 57: 0.5697% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="321.5" y="121.5" width="3.3" height="178.5" rx="0" style="fill: #5B45D6"><title>Rank 58: 0.5564% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="325.6" y="122.9" width="3.3" height="177.1" rx="0" style="fill: #5B45D6"><title>Rank 59: 0.5295% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="329.8" y="124.0" width="3.3" height="176.0" rx="0" style="fill: #5B45D6"><title>Rank 60: 0.5097% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="333.9" y="125.1" width="3.3" height="174.9" rx="0" style="fill: #5B45D6"><title>Rank 61: 0.4914% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="338.0" y="125.4" width="3.3" height="174.6" rx="0" style="fill: #5B45D6"><title>Rank 62: 0.4847% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="342.1" y="126.3" width="3.3" height="173.7" rx="0" style="fill: #5B45D6"><title>Rank 63: 0.4695% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="346.3" y="126.4" width="3.3" height="173.6" rx="0" style="fill: #5B45D6"><title>Rank 64: 0.4684% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="350.4" y="127.5" width="3.3" height="172.5" rx="0" style="fill: #5B45D6"><title>Rank 65: 0.4512% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="354.5" y="127.9" width="3.3" height="172.1" rx="0" style="fill: #5B45D6"><title>Rank 66: 0.4444% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="358.6" y="128.0" width="3.3" height="172.0" rx="0" style="fill: #5B45D6"><title>Rank 67: 0.4426% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="362.8" y="128.1" width="3.3" height="171.9" rx="0" style="fill: #5B45D6"><title>Rank 68: 0.4409% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="366.9" y="128.3" width="3.3" height="171.7" rx="0" style="fill: #5B45D6"><title>Rank 69: 0.4379% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="371.0" y="128.6" width="3.3" height="171.4" rx="0" style="fill: #5B45D6"><title>Rank 70: 0.4342% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="375.1" y="128.6" width="3.3" height="171.4" rx="0" style="fill: #5B45D6"><title>Rank 71: 0.4328% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="379.3" y="128.6" width="3.3" height="171.4" rx="0" style="fill: #5B45D6"><title>Rank 72: 0.4328% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="383.4" y="128.7" width="3.3" height="171.3" rx="0" style="fill: #5B45D6"><title>Rank 73: 0.4313% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="387.5" y="129.0" width="3.3" height="171.0" rx="0" style="fill: #5B45D6"><title>Rank 74: 0.4269% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="391.6" y="129.9" width="3.3" height="170.1" rx="0" style="fill: #5B45D6"><title>Rank 75: 0.4143% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="395.8" y="130.4" width="3.3" height="169.6" rx="0" style="fill: #5B45D6"><title>Rank 76: 0.4062% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="399.9" y="130.6" width="3.3" height="169.4" rx="0" style="fill: #5B45D6"><title>Rank 77: 0.4038% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="404.0" y="130.8" width="3.3" height="169.2" rx="0" style="fill: #5B45D6"><title>Rank 78: 0.4004% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="408.1" y="131.2" width="3.3" height="168.8" rx="0" style="fill: #5B45D6"><title>Rank 79: 0.3959% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="412.3" y="131.2" width="3.3" height="168.8" rx="0" style="fill: #5B45D6"><title>Rank 80: 0.3948% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="416.4" y="131.6" width="3.3" height="168.4" rx="0" style="fill: #5B45D6"><title>Rank 81: 0.3904% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="420.5" y="131.6" width="3.3" height="168.4" rx="0" style="fill: #5B45D6"><title>Rank 82: 0.3892% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="424.6" y="131.7" width="3.3" height="168.3" rx="0" style="fill: #5B45D6"><title>Rank 83: 0.3880% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="428.8" y="132.0" width="3.3" height="168.0" rx="0" style="fill: #C2410C"><title>Rank 84: 0.3838% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="432.9" y="132.2" width="3.3" height="167.8" rx="0" style="fill: #5B45D6"><title>Rank 85: 0.3816% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="437.0" y="132.7" width="3.3" height="167.3" rx="0" style="fill: #5B45D6"><title>Rank 86: 0.3745% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="441.1" y="133.1" width="3.3" height="166.9" rx="0" style="fill: #5B45D6"><title>Rank 87: 0.3692% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="445.3" y="133.1" width="3.3" height="166.9" rx="0" style="fill: #5B45D6"><title>Rank 88: 0.3692% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="449.4" y="134.4" width="3.3" height="165.6" rx="0" style="fill: #5B45D6"><title>Rank 89: 0.3525% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="453.5" y="134.7" width="3.3" height="165.3" rx="0" style="fill: #5B45D6"><title>Rank 90: 0.3493% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="457.6" y="135.4" width="3.3" height="164.6" rx="0" style="fill: #5B45D6"><title>Rank 91: 0.3411% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="461.8" y="135.4" width="3.3" height="164.6" rx="0" style="fill: #C2410C"><title>Rank 92: 0.3410% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="465.9" y="135.4" width="3.3" height="164.6" rx="0" style="fill: #5B45D6"><title>Rank 93: 0.3402% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="470.0" y="135.5" width="3.3" height="164.5" rx="0" style="fill: #5B45D6"><title>Rank 94: 0.3395% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="474.1" y="135.6" width="3.3" height="164.4" rx="0" style="fill: #5B45D6"><title>Rank 95: 0.3383% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="478.3" y="136.7" width="3.3" height="163.3" rx="0" style="fill: #5B45D6"><title>Rank 96: 0.3251% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="482.4" y="136.8" width="3.3" height="163.2" rx="0" style="fill: #5B45D6"><title>Rank 97: 0.3243% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="486.5" y="137.8" width="3.3" height="162.2" rx="0" style="fill: #5B45D6"><title>Rank 98: 0.3131% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="490.6" y="138.0" width="3.3" height="162.0" rx="0" style="fill: #5B45D6"><title>Rank 99: 0.3106% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="494.8" y="138.7" width="3.3" height="161.3" rx="0" style="fill: #5B45D6"><title>Rank 100: 0.3031% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="498.9" y="139.0" width="3.3" height="161.0" rx="0" style="fill: #C2410C"><title>Rank 101: 0.3002% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="503.0" y="139.0" width="3.3" height="161.0" rx="0" style="fill: #5B45D6"><title>Rank 102: 0.2997% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="507.1" y="140.0" width="3.3" height="160.0" rx="0" style="fill: #C2410C"><title>Rank 103: 0.2890% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="511.3" y="140.4" width="3.3" height="159.6" rx="0" style="fill: #C2410C"><title>Rank 104: 0.2849% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="515.4" y="140.6" width="3.3" height="159.4" rx="0" style="fill: #5B45D6"><title>Rank 105: 0.2831% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="519.5" y="140.7" width="3.3" height="159.3" rx="0" style="fill: #C2410C"><title>Rank 106: 0.2827% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="523.6" y="140.8" width="3.3" height="159.2" rx="0" style="fill: #5B45D6"><title>Rank 107: 0.2813% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="527.8" y="141.4" width="3.3" height="158.6" rx="0" style="fill: #5B45D6"><title>Rank 108: 0.2754% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="531.9" y="141.8" width="3.3" height="158.2" rx="0" style="fill: #5B45D6"><title>Rank 109: 0.2719% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="536.0" y="141.8" width="3.3" height="158.2" rx="0" style="fill: #5B45D6"><title>Rank 110: 0.2712% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="540.1" y="142.2" width="3.3" height="157.8" rx="0" style="fill: #5B45D6"><title>Rank 111: 0.2678% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="544.3" y="142.9" width="3.3" height="157.1" rx="0" style="fill: #5B45D6"><title>Rank 112: 0.2616% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="548.4" y="143.6" width="3.3" height="156.4" rx="0" style="fill: #5B45D6"><title>Rank 113: 0.2547% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="552.5" y="143.7" width="3.3" height="156.3" rx="0" style="fill: #5B45D6"><title>Rank 114: 0.2542% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="556.6" y="143.7" width="3.3" height="156.3" rx="0" style="fill: #5B45D6"><title>Rank 115: 0.2537% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="560.8" y="144.7" width="3.3" height="155.3" rx="0" style="fill: #C2410C"><title>Rank 116: 0.2452% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="564.9" y="144.7" width="3.3" height="155.3" rx="0" style="fill: #C2410C"><title>Rank 117: 0.2449% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="569.0" y="145.0" width="3.3" height="155.0" rx="0" style="fill: #C2410C"><title>Rank 118: 0.2424% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="573.1" y="145.3" width="3.3" height="154.7" rx="0" style="fill: #5B45D6"><title>Rank 119: 0.2398% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="577.3" y="145.4" width="3.3" height="154.6" rx="0" style="fill: #5B45D6"><title>Rank 120: 0.2390% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="581.4" y="145.5" width="3.3" height="154.5" rx="0" style="fill: #5B45D6"><title>Rank 121: 0.2380% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="585.5" y="146.3" width="3.3" height="153.7" rx="0" style="fill: #5B45D6"><title>Rank 122: 0.2312% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="589.6" y="146.4" width="3.3" height="153.6" rx="0" style="fill: #5B45D6"><title>Rank 123: 0.2307% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="593.8" y="146.5" width="3.3" height="153.5" rx="0" style="fill: #C2410C"><title>Rank 124: 0.2303% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="597.9" y="147.0" width="3.3" height="153.0" rx="0" style="fill: #5B45D6"><title>Rank 125: 0.2262% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="602.0" y="147.0" width="3.3" height="153.0" rx="0" style="fill: #5B45D6"><title>Rank 126: 0.2255% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="606.1" y="147.9" width="3.3" height="152.1" rx="0" style="fill: #5B45D6"><title>Rank 127: 0.2186% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="610.3" y="148.2" width="3.3" height="151.8" rx="0" style="fill: #C2410C"><title>Rank 128: 0.2168% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="614.4" y="148.7" width="3.3" height="151.3" rx="0" style="fill: #5B45D6"><title>Rank 129: 0.2124% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="618.5" y="149.4" width="3.3" height="150.6" rx="0" style="fill: #5B45D6"><title>Rank 130: 0.2074% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="622.6" y="149.8" width="3.3" height="150.2" rx="0" style="fill: #5B45D6"><title>Rank 131: 0.2046% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="626.8" y="150.3" width="3.3" height="149.7" rx="0" style="fill: #C2410C"><title>Rank 132: 0.2012% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="630.9" y="150.8" width="3.3" height="149.2" rx="0" style="fill: #5B45D6"><title>Rank 133: 0.1972% of the weight, ordinary expert, kept by MD</title></rect>
+<rect x="635.0" y="151.6" width="3.3" height="148.4" rx="0" style="fill: #5B45D6" opacity="0.35"><title>Rank 134: 0.1921% of the weight, ordinary expert, dropped by D1</title></rect>
+<rect x="639.1" y="153.1" width="3.3" height="146.9" rx="0" style="fill: #5B45D6" opacity="0.35"><title>Rank 135: 0.1819% of the weight, ordinary expert, dropped by D1</title></rect>
+<rect x="643.3" y="153.4" width="3.3" height="146.6" rx="0" style="fill: #5B45D6" opacity="0.35"><title>Rank 136: 0.1802% of the weight, ordinary expert, dropped by D1</title></rect>
+<rect x="647.4" y="154.7" width="3.3" height="145.3" rx="0" style="fill: #5B45D6" opacity="0.35"><title>Rank 137: 0.1719% of the weight, ordinary expert, dropped by D1</title></rect>
+<rect x="651.5" y="155.8" width="3.3" height="144.2" rx="0" style="fill: #C2410C"><title>Rank 138: 0.1653% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="655.6" y="156.3" width="3.3" height="143.7" rx="0" style="fill: #5B45D6" opacity="0.35"><title>Rank 139: 0.1627% of the weight, ordinary expert, dropped by D1</title></rect>
+<rect x="659.8" y="159.7" width="3.3" height="140.3" rx="0" style="fill: #C2410C"><title>Rank 140: 0.1440% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="663.9" y="161.5" width="3.3" height="138.5" rx="0" style="fill: #C2410C"><title>Rank 141: 0.1349% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="668.0" y="165.6" width="3.3" height="134.4" rx="0" style="fill: #C2410C"><title>Rank 142: 0.1168% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="672.1" y="167.3" width="3.3" height="132.7" rx="0" style="fill: #C2410C"><title>Rank 143: 0.1102% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="676.3" y="167.3" width="3.3" height="132.7" rx="0" style="fill: #C2410C"><title>Rank 144: 0.1099% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="680.4" y="169.5" width="3.3" height="130.5" rx="0" style="fill: #C2410C"><title>Rank 145: 0.1018% of the weight, mandatory tool expert, kept by MD</title></rect>
+<rect x="684.5" y="170.9" width="3.3" height="129.1" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 146: 0.0969% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="688.6" y="171.2" width="3.3" height="128.8" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 147: 0.0957% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="692.8" y="177.8" width="3.3" height="122.2" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 148: 0.0759% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="696.9" y="179.7" width="3.3" height="120.3" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 149: 0.0708% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="701.0" y="184.0" width="3.3" height="116.0" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 150: 0.0609% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="705.1" y="188.4" width="3.3" height="111.6" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 151: 0.0521% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="709.3" y="201.6" width="3.3" height="98.4" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 152: 0.0326% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="713.4" y="202.7" width="3.3" height="97.3" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 153: 0.0314% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="717.5" y="204.5" width="3.3" height="95.5" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 154: 0.0295% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="721.6" y="210.5" width="3.3" height="89.5" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 155: 0.0238% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="725.8" y="213.5" width="3.3" height="86.5" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 156: 0.0214% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="729.9" y="222.4" width="3.3" height="77.6" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 157: 0.0156% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="734.0" y="222.8" width="3.3" height="77.2" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 158: 0.0154% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="738.1" y="238.9" width="3.3" height="61.1" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 159: 0.0087% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<rect x="742.3" y="272.0" width="3.3" height="28.0" rx="0" style="fill: #C2410C" opacity="0.35"><title>Rank 160: 0.0027% of the weight, mandatory tool expert, dropped by M1</title></rect>
+<line x1="86.0" y1="170.0" x2="746.0" y2="170.0" style="stroke: #131A2E" stroke-width="1.2" stroke-dasharray="5 4"/>
+<line x1="86.0" y1="300.0" x2="746.0" y2="300.0" style="stroke: #56617B" stroke-width="1"/>
+<path d="M634.6,308 V314 H659.4 V308" style="stroke: #5B45D6; fill: none" stroke-width="1.5"/>
+<text x="659.4" y="329.0" class="t" text-anchor="end" style="fill: #5B45D6">D1: 5 cold ordinary</text>
+<path d="M684.1,338 V344 H746.0 V338" style="stroke: #C2410C; fill: none" stroke-width="1.5"/>
+<text x="746.0" y="359.0" class="t" text-anchor="end" style="fill: #C2410C">M1: 15 cold mandatory</text>
+<text x="86.0" y="320.0" class="t-s" text-anchor="start">Rank 1: the most used expert</text>
+<text x="86.0" y="334.0" class="t-s" text-anchor="start">(7.2% of the layer's weight)</text>
+<text x="746.0" y="58.0" class="t" text-anchor="end">The 21 coldest experts are all</text>
+<text x="746.0" y="73.0" class="t" text-anchor="end">mandatory. Every earlier cut kept them.</text>
+<path d="M659.4,82.0 H746.0" style="stroke: #C2410C; fill: none" stroke-width="1.5"/>
+<path d="M702.7,82.0 V144.1" style="stroke: #C2410C; fill: none" stroke-width="1.5"/>
+<rect x="86.0" y="400.0" width="14.0" height="14.0" rx="2" style="fill: #C2410C"></rect>
+<text x="106.0" y="412.0" class="t" text-anchor="start">mandatory tool expert</text>
+<rect x="279.2" y="400.0" width="14.0" height="14.0" rx="2" style="fill: #5B45D6"></rect>
+<text x="299.2" y="412.0" class="t" text-anchor="start">ordinary expert</text>
+<rect x="429.2" y="400.0" width="14.0" height="14.0" rx="2" style="fill: #56617B" opacity="0.35"></rect>
+<text x="449.2" y="412.0" class="t" text-anchor="start">light: MD drops it</text>
+</svg>

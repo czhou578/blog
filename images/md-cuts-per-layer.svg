@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="-16 -16 792 360" width="792" height="360" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>The experts that MD removes in each layer, on top of the 56 of the live prune</title>
+<desc>Stacked bars for the 43 layers: the cold mandatory experts of M1 and the cold ordinary experts of D1. Layers 0 to 2 lose none. Layer 26 loses the most, 20, and keeps 140.</desc>
+<style>.s-ink{fill:#131A2E}.s-muted{fill:#56617B}.s-surface{fill:#FFFFFF}.s-bg{fill:#F3F5FA}.s-line{fill:#D8DDEA}.s-ok{fill:#1F7A36}.s-bad{fill:#C42B2B}.s-warn{fill:#9A6200}.s-goal{fill:#6B4E16}.s-measure{fill:#0B7F86}.s-reap{fill:#C2410C}.s-bot{fill:#5B45D6}.s-topk{fill:#A86A00}.s-review{fill:#B02A6B}.s-prune{fill:#237A3B}.s-ship{fill:#1D63C4}.st-ink{stroke:#131A2E;fill:none}.st-muted{stroke:#56617B;fill:none}.st-line{stroke:#D8DDEA;fill:none}.st-ok{stroke:#1F7A36;fill:none}.st-bad{stroke:#C42B2B;fill:none}.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}.t-w{fill:#FFFFFF}</style>
+<rect x="-15.5" y="-15.5" width="791" height="359" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<line x1="60.0" y1="250.0" x2="750.0" y2="250.0" style="stroke: #56617B" stroke-width="1"/>
+<text x="52.0" y="254.0" class="t-s" text-anchor="end">0</text>
+<line x1="60.0" y1="202.3" x2="750.0" y2="202.3" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="52.0" y="206.3" class="t-s" text-anchor="end">5</text>
+<line x1="60.0" y1="154.5" x2="750.0" y2="154.5" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="52.0" y="158.5" class="t-s" text-anchor="end">10</text>
+<line x1="60.0" y1="106.8" x2="750.0" y2="106.8" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="52.0" y="110.8" class="t-s" text-anchor="end">15</text>
+<line x1="60.0" y1="59.1" x2="750.0" y2="59.1" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="52.0" y="63.1" class="t-s" text-anchor="end">20</text>
+<text x="-4.0" y="20.0" class="t-s" text-anchor="start">Experts that MD removes from the layer</text>
+<text x="68.0" y="266.0" class="t-s" text-anchor="middle">0</text>
+<rect x="110.1" y="230.9" width="12.0" height="19.1" rx="0" style="fill: #C2410C"><title>Layer 3: 2 cold mandatory experts (M1)</title></rect>
+<rect x="110.1" y="192.7" width="12.0" height="38.2" rx="0" style="fill: #5B45D6"><title>Layer 3: 4 cold ordinary experts (D1)</title></rect>
+<rect x="126.2" y="211.8" width="12.0" height="38.2" rx="0" style="fill: #C2410C"><title>Layer 4: 4 cold mandatory experts (M1)</title></rect>
+<rect x="126.2" y="135.5" width="12.0" height="76.4" rx="0" style="fill: #5B45D6"><title>Layer 4: 8 cold ordinary experts (D1)</title></rect>
+<rect x="142.2" y="211.8" width="12.0" height="38.2" rx="0" style="fill: #C2410C"><title>Layer 5: 4 cold mandatory experts (M1)</title></rect>
+<rect x="142.2" y="164.1" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 5: 5 cold ordinary experts (D1)</title></rect>
+<text x="148.3" y="266.0" class="t-s" text-anchor="middle">5</text>
+<rect x="158.3" y="211.8" width="12.0" height="38.2" rx="0" style="fill: #C2410C"><title>Layer 6: 4 cold mandatory experts (M1)</title></rect>
+<rect x="158.3" y="164.1" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 6: 5 cold ordinary experts (D1)</title></rect>
+<rect x="174.3" y="211.8" width="12.0" height="38.2" rx="0" style="fill: #C2410C"><title>Layer 7: 4 cold mandatory experts (M1)</title></rect>
+<rect x="174.3" y="154.5" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 7: 6 cold ordinary experts (D1)</title></rect>
+<rect x="190.4" y="211.8" width="12.0" height="38.2" rx="0" style="fill: #C2410C"><title>Layer 8: 4 cold mandatory experts (M1)</title></rect>
+<rect x="190.4" y="154.5" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 8: 6 cold ordinary experts (D1)</title></rect>
+<rect x="206.4" y="240.5" width="12.0" height="9.5" rx="0" style="fill: #C2410C"><title>Layer 9: 1 cold mandatory experts (M1)</title></rect>
+<rect x="206.4" y="192.7" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 9: 5 cold ordinary experts (D1)</title></rect>
+<rect x="222.5" y="240.5" width="12.0" height="9.5" rx="0" style="fill: #C2410C"><title>Layer 10: 1 cold mandatory experts (M1)</title></rect>
+<rect x="222.5" y="192.7" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 10: 5 cold ordinary experts (D1)</title></rect>
+<text x="228.5" y="266.0" class="t-s" text-anchor="middle">10</text>
+<rect x="238.5" y="221.4" width="12.0" height="28.6" rx="0" style="fill: #C2410C"><title>Layer 11: 3 cold mandatory experts (M1)</title></rect>
+<rect x="238.5" y="173.6" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 11: 5 cold ordinary experts (D1)</title></rect>
+<rect x="254.6" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 12: 8 cold mandatory experts (M1)</title></rect>
+<rect x="254.6" y="106.8" width="12.0" height="66.8" rx="0" style="fill: #5B45D6"><title>Layer 12: 7 cold ordinary experts (D1)</title></rect>
+<rect x="270.6" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 13: 8 cold mandatory experts (M1)</title></rect>
+<rect x="270.6" y="116.4" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 13: 6 cold ordinary experts (D1)</title></rect>
+<rect x="286.7" y="135.5" width="12.0" height="114.5" rx="0" style="fill: #C2410C"><title>Layer 14: 12 cold mandatory experts (M1)</title></rect>
+<rect x="286.7" y="78.2" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 14: 6 cold ordinary experts (D1)</title></rect>
+<rect x="302.7" y="183.2" width="12.0" height="66.8" rx="0" style="fill: #C2410C"><title>Layer 15: 7 cold mandatory experts (M1)</title></rect>
+<rect x="302.7" y="106.8" width="12.0" height="76.4" rx="0" style="fill: #5B45D6"><title>Layer 15: 8 cold ordinary experts (D1)</title></rect>
+<text x="308.7" y="266.0" class="t-s" text-anchor="middle">15</text>
+<rect x="318.7" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 16: 8 cold mandatory experts (M1)</title></rect>
+<rect x="318.7" y="125.9" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 16: 5 cold ordinary experts (D1)</title></rect>
+<rect x="334.8" y="154.5" width="12.0" height="95.5" rx="0" style="fill: #C2410C"><title>Layer 17: 10 cold mandatory experts (M1)</title></rect>
+<rect x="334.8" y="116.4" width="12.0" height="38.2" rx="0" style="fill: #5B45D6"><title>Layer 17: 4 cold ordinary experts (D1)</title></rect>
+<rect x="350.8" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 18: 8 cold mandatory experts (M1)</title></rect>
+<rect x="350.8" y="125.9" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 18: 5 cold ordinary experts (D1)</title></rect>
+<rect x="366.9" y="221.4" width="12.0" height="28.6" rx="0" style="fill: #C2410C"><title>Layer 19: 3 cold mandatory experts (M1)</title></rect>
+<rect x="366.9" y="183.2" width="12.0" height="38.2" rx="0" style="fill: #5B45D6"><title>Layer 19: 4 cold ordinary experts (D1)</title></rect>
+<rect x="382.9" y="183.2" width="12.0" height="66.8" rx="0" style="fill: #C2410C"><title>Layer 20: 7 cold mandatory experts (M1)</title></rect>
+<rect x="382.9" y="135.5" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 20: 5 cold ordinary experts (D1)</title></rect>
+<text x="389.0" y="266.0" class="t-s" text-anchor="middle">20</text>
+<rect x="399.0" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 21: 8 cold mandatory experts (M1)</title></rect>
+<rect x="399.0" y="116.4" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 21: 6 cold ordinary experts (D1)</title></rect>
+<rect x="415.0" y="145.0" width="12.0" height="105.0" rx="0" style="fill: #C2410C"><title>Layer 22: 11 cold mandatory experts (M1)</title></rect>
+<rect x="415.0" y="87.7" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 22: 6 cold ordinary experts (D1)</title></rect>
+<rect x="431.1" y="183.2" width="12.0" height="66.8" rx="0" style="fill: #C2410C"><title>Layer 23: 7 cold mandatory experts (M1)</title></rect>
+<rect x="431.1" y="135.5" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 23: 5 cold ordinary experts (D1)</title></rect>
+<rect x="447.1" y="164.1" width="12.0" height="85.9" rx="0" style="fill: #C2410C"><title>Layer 24: 9 cold mandatory experts (M1)</title></rect>
+<rect x="447.1" y="97.3" width="12.0" height="66.8" rx="0" style="fill: #5B45D6"><title>Layer 24: 7 cold ordinary experts (D1)</title></rect>
+<rect x="463.2" y="164.1" width="12.0" height="85.9" rx="0" style="fill: #C2410C"><title>Layer 25: 9 cold mandatory experts (M1)</title></rect>
+<rect x="463.2" y="106.8" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 25: 6 cold ordinary experts (D1)</title></rect>
+<text x="469.2" y="266.0" class="t-s" text-anchor="middle">25</text>
+<rect x="479.2" y="106.8" width="12.0" height="143.2" rx="0" style="fill: #C2410C"><title>Layer 26: 15 cold mandatory experts (M1)</title></rect>
+<rect x="479.2" y="59.1" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 26: 5 cold ordinary experts (D1)</title></rect>
+<text x="485.2" y="39.1" class="t" text-anchor="middle">K 140</text>
+<text x="485.2" y="53.1" class="t-s" text-anchor="middle">−20</text>
+<rect x="495.3" y="192.7" width="12.0" height="57.3" rx="0" style="fill: #C2410C"><title>Layer 27: 6 cold mandatory experts (M1)</title></rect>
+<rect x="495.3" y="145.0" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 27: 5 cold ordinary experts (D1)</title></rect>
+<rect x="511.3" y="192.7" width="12.0" height="57.3" rx="0" style="fill: #C2410C"><title>Layer 28: 6 cold mandatory experts (M1)</title></rect>
+<rect x="511.3" y="135.5" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 28: 6 cold ordinary experts (D1)</title></rect>
+<rect x="527.3" y="183.2" width="12.0" height="66.8" rx="0" style="fill: #C2410C"><title>Layer 29: 7 cold mandatory experts (M1)</title></rect>
+<rect x="527.3" y="125.9" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 29: 6 cold ordinary experts (D1)</title></rect>
+<rect x="543.4" y="192.7" width="12.0" height="57.3" rx="0" style="fill: #C2410C"><title>Layer 30: 6 cold mandatory experts (M1)</title></rect>
+<rect x="543.4" y="145.0" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 30: 5 cold ordinary experts (D1)</title></rect>
+<text x="549.4" y="266.0" class="t-s" text-anchor="middle">30</text>
+<rect x="559.4" y="211.8" width="12.0" height="38.2" rx="0" style="fill: #C2410C"><title>Layer 31: 4 cold mandatory experts (M1)</title></rect>
+<rect x="559.4" y="164.1" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 31: 5 cold ordinary experts (D1)</title></rect>
+<rect x="575.5" y="202.3" width="12.0" height="47.7" rx="0" style="fill: #C2410C"><title>Layer 32: 5 cold mandatory experts (M1)</title></rect>
+<rect x="575.5" y="154.5" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 32: 5 cold ordinary experts (D1)</title></rect>
+<rect x="591.5" y="164.1" width="12.0" height="85.9" rx="0" style="fill: #C2410C"><title>Layer 33: 9 cold mandatory experts (M1)</title></rect>
+<rect x="591.5" y="116.4" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 33: 5 cold ordinary experts (D1)</title></rect>
+<rect x="607.6" y="154.5" width="12.0" height="95.5" rx="0" style="fill: #C2410C"><title>Layer 34: 10 cold mandatory experts (M1)</title></rect>
+<rect x="607.6" y="106.8" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 34: 5 cold ordinary experts (D1)</title></rect>
+<rect x="623.6" y="221.4" width="12.0" height="28.6" rx="0" style="fill: #C2410C"><title>Layer 35: 3 cold mandatory experts (M1)</title></rect>
+<rect x="623.6" y="173.6" width="12.0" height="47.7" rx="0" style="fill: #5B45D6"><title>Layer 35: 5 cold ordinary experts (D1)</title></rect>
+<text x="629.7" y="266.0" class="t-s" text-anchor="middle">35</text>
+<rect x="639.7" y="164.1" width="12.0" height="85.9" rx="0" style="fill: #C2410C"><title>Layer 36: 9 cold mandatory experts (M1)</title></rect>
+<rect x="639.7" y="97.3" width="12.0" height="66.8" rx="0" style="fill: #5B45D6"><title>Layer 36: 7 cold ordinary experts (D1)</title></rect>
+<rect x="655.7" y="183.2" width="12.0" height="66.8" rx="0" style="fill: #C2410C"><title>Layer 37: 7 cold mandatory experts (M1)</title></rect>
+<rect x="655.7" y="125.9" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 37: 6 cold ordinary experts (D1)</title></rect>
+<rect x="671.8" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 38: 8 cold mandatory experts (M1)</title></rect>
+<rect x="671.8" y="116.4" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 38: 6 cold ordinary experts (D1)</title></rect>
+<rect x="687.8" y="221.4" width="12.0" height="28.6" rx="0" style="fill: #C2410C"><title>Layer 39: 3 cold mandatory experts (M1)</title></rect>
+<rect x="687.8" y="164.1" width="12.0" height="57.3" rx="0" style="fill: #5B45D6"><title>Layer 39: 6 cold ordinary experts (D1)</title></rect>
+<rect x="703.9" y="173.6" width="12.0" height="76.4" rx="0" style="fill: #C2410C"><title>Layer 40: 8 cold mandatory experts (M1)</title></rect>
+<rect x="703.9" y="87.7" width="12.0" height="85.9" rx="0" style="fill: #5B45D6"><title>Layer 40: 9 cold ordinary experts (D1)</title></rect>
+<text x="709.9" y="266.0" class="t-s" text-anchor="middle">40</text>
+<rect x="719.9" y="221.4" width="12.0" height="28.6" rx="0" style="fill: #C2410C"><title>Layer 41: 3 cold mandatory experts (M1)</title></rect>
+<rect x="719.9" y="154.5" width="12.0" height="66.8" rx="0" style="fill: #5B45D6"><title>Layer 41: 7 cold ordinary experts (D1)</title></rect>
+<rect x="736.0" y="192.7" width="12.0" height="57.3" rx="0" style="fill: #C2410C"><title>Layer 42: 6 cold mandatory experts (M1)</title></rect>
+<rect x="736.0" y="125.9" width="12.0" height="66.8" rx="0" style="fill: #5B45D6"><title>Layer 42: 7 cold ordinary experts (D1)</title></rect>
+<text x="742.0" y="266.0" class="t-s" text-anchor="middle">42</text>
+<text x="62.0" y="164.1" class="t-s" text-anchor="start">layers 0–2</text>
+<text x="62.0" y="179.4" class="t-s" text-anchor="start">no cut</text>
+<text x="405.0" y="284.0" class="t-s" text-anchor="middle">Layer</text>
+<rect x="60.0" y="314.0" width="14.0" height="14.0" rx="2" style="fill: #C2410C"></rect>
+<text x="80.0" y="326.0" class="t" text-anchor="start">M1: cold mandatory (257)</text>
+<rect x="274.8" y="314.0" width="14.0" height="14.0" rx="2" style="fill: #5B45D6"></rect>
+<text x="294.8" y="326.0" class="t" text-anchor="start">D1: cold ordinary (229)</text>
+<text x="482.4" y="326.0" class="t-s" text-anchor="start">kept K = 160 − the bar</text>
+</svg>
