@@ -1,0 +1,78 @@
+<svg viewBox="-16 -16 792 536" width="792" height="536" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Coverage of the routing against the share of experts kept, for Qwen and DeepSeek</title>
+<desc>Share of the routed slots that the top K experts carry, mean over the layers and lowest layer, against the share of experts kept. DeepSeek (216 experts): K 144 keeps 92.5%, failed the NLL gate (+3.3 to +3.9%); K 160 keeps 95.4%, passed (+1.9%). Qwen (256 experts): K 176 keeps 91.0% (+11.11%), K 192 keeps 93.9% (+8.04%), K 208 keeps 96.3% (+4.15%), all failed the NLL gate (limit +3%).</desc>
+<style>.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}</style>
+<rect x="-15.5" y="-15.5" width="791" height="535" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<text x="0" y="12" class="t-b">Coverage of the routing against the share of experts kept</text>
+<line x1="0" y1="36" x2="22" y2="36" stroke="#5B45D6" stroke-width="2" stroke-linecap="round"/>
+<text x="30" y="40" class="t">Qwen3.6-35B-A3B, 256 experts</text>
+<line x1="259.6" y1="36" x2="281.6" y2="36" stroke="#C2410C" stroke-width="2" stroke-linecap="round"/>
+<text x="289.6" y="40" class="t">DeepSeek V4 Flash, 216 experts</text>
+<line x1="0" y1="58" x2="22" y2="58" stroke="#56617B" stroke-width="2" stroke-linecap="round"/>
+<text x="30" y="62" class="t-s">mean over the layers</text>
+<line x1="178.0" y1="58" x2="200.0" y2="58" stroke="#56617B" stroke-width="2" stroke-dasharray="5 4"/>
+<text x="208.0" y="62" class="t-s">lowest layer</text>
+<circle cx="319.6" cy="58.0" r="5" fill="#56617B" stroke="#FFFFFF" stroke-width="2"/>
+<text x="331.6" y="62" class="t-s">NLL gate passed</text>
+<circle cx="452.1" cy="58.0" r="6.5" fill="#FFFFFF"/><path d="M447.9 53.8L456.3 62.2M447.9 62.2L456.3 53.8" stroke="#56617B" stroke-width="2.2" stroke-linecap="round"/>
+<text x="464.1" y="62" class="t-s">NLL gate failed (limit: +3%)</text>
+<line x1="150" y1="432.0" x2="716" y2="432.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="435.5" class="t-s">65%</text>
+<line x1="150" y1="383.4" x2="716" y2="383.4" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="386.9" class="t-s">70%</text>
+<line x1="150" y1="334.9" x2="716" y2="334.9" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="338.4" class="t-s">75%</text>
+<line x1="150" y1="286.3" x2="716" y2="286.3" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="289.8" class="t-s">80%</text>
+<line x1="150" y1="237.7" x2="716" y2="237.7" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="241.2" class="t-s">85%</text>
+<line x1="150" y1="189.1" x2="716" y2="189.1" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="192.6" class="t-s">90%</text>
+<line x1="150" y1="140.6" x2="716" y2="140.6" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="144.1" class="t-s">95%</text>
+<line x1="150" y1="92.0" x2="716" y2="92.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="724" y="95.5" class="t-s">100%</text>
+<line x1="150.0" y1="432" x2="150.0" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="150.0" y="449" class="t-s" text-anchor="middle">55%</text>
+<line x1="212.9" y1="432" x2="212.9" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="212.9" y="449" class="t-s" text-anchor="middle">60%</text>
+<line x1="275.8" y1="432" x2="275.8" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="275.8" y="449" class="t-s" text-anchor="middle">65%</text>
+<line x1="338.7" y1="432" x2="338.7" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="338.7" y="449" class="t-s" text-anchor="middle">70%</text>
+<line x1="401.6" y1="432" x2="401.6" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="401.6" y="449" class="t-s" text-anchor="middle">75%</text>
+<line x1="464.4" y1="432" x2="464.4" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="464.4" y="449" class="t-s" text-anchor="middle">80%</text>
+<line x1="527.3" y1="432" x2="527.3" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="527.3" y="449" class="t-s" text-anchor="middle">85%</text>
+<line x1="590.2" y1="432" x2="590.2" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="590.2" y="449" class="t-s" text-anchor="middle">90%</text>
+<line x1="653.1" y1="432" x2="653.1" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="653.1" y="449" class="t-s" text-anchor="middle">95%</text>
+<line x1="716.0" y1="432" x2="716.0" y2="436" stroke="#56617B" stroke-width="1"/>
+<text x="716.0" y="449" class="t-s" text-anchor="middle">100%</text>
+<line x1="150" y1="432" x2="716" y2="432" stroke="#56617B" stroke-width="1"/>
+<text x="433" y="468" class="t-s" text-anchor="middle">Share of the routed experts kept per layer (K / all experts)</text>
+<text x="768" y="82" class="t-s" text-anchor="end">Coverage</text>
+<path d="M150.0 223.4L151.2 222.9L157.0 220.2L162.8 217.5L168.6 214.9L174.5 212.3L180.3 209.7L186.1 207.2L191.9 204.7L197.7 202.2L203.6 199.7L209.4 197.3L215.2 194.9L221.0 192.5L226.9 190.2L232.7 187.9L238.5 185.6L244.3 183.4L250.2 181.1L256.0 178.9L261.8 176.8L267.6 174.7L273.4 172.6L279.3 170.5L285.1 168.5L290.9 166.5L296.7 164.5L302.6 162.5L308.4 160.6L314.2 158.7L320.0 156.9L325.9 155.0L331.7 153.2L337.5 151.5L343.3 149.7L349.1 148.0L355.0 146.3L360.8 144.6L366.6 143.0L372.4 141.4L378.3 139.8L384.1 138.2L389.9 136.7L395.7 135.2L401.6 133.7L407.4 132.3L413.2 130.8L419.0 129.5L424.8 128.1L430.7 126.8L436.5 125.5L442.3 124.2L448.1 123.0L454.0 121.7L459.8 120.5L465.6 119.4L471.4 118.2L477.3 117.1L483.1 116.0L488.9 114.9L494.7 113.8L500.5 112.8L506.4 111.8L512.2 110.8L518.0 109.9L523.8 108.9L529.7 108.0L535.5 107.2L541.3 106.3L547.1 105.5L553.0 104.7L558.8 103.9L564.6 103.2L570.4 102.4L576.2 101.8L582.1 101.1L587.9 100.4L593.7 99.8L599.5 99.2L605.4 98.7L611.2 98.1L617.0 97.6L622.8 97.1L628.7 96.6L634.5 96.1L640.3 95.7L646.1 95.3L651.9 94.8L657.8 94.5L663.6 94.1L669.4 93.8L675.2 93.5L681.1 93.2L686.9 93.0L692.7 92.7L698.5 92.5L704.4 92.3L710.2 92.1L716.0 92.0" fill="none" stroke="#C2410C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M150.0 259.8L151.0 259.3L155.9 256.6L160.8 254.0L165.7 251.4L170.6 248.8L175.5 246.2L180.5 243.7L185.4 241.2L190.3 238.7L195.2 236.2L200.1 233.7L205.0 231.3L209.9 228.9L214.9 226.5L219.8 224.1L224.7 221.8L229.6 219.4L234.5 217.1L239.4 214.8L244.3 212.6L249.2 210.3L254.2 208.1L259.1 205.9L264.0 203.8L268.9 201.6L273.8 199.5L278.7 197.3L283.6 195.2L288.6 193.2L293.5 191.1L298.4 189.1L303.3 187.1L308.2 185.1L313.1 183.1L318.0 181.1L322.9 179.2L327.9 177.3L332.8 175.4L337.7 173.5L342.6 171.7L347.5 169.9L352.4 168.0L357.3 166.2L362.2 164.5L367.2 162.7L372.1 161.0L377.0 159.3L381.9 157.6L386.8 155.9L391.7 154.3L396.6 152.7L401.6 151.1L406.5 149.5L411.4 147.9L416.3 146.4L421.2 144.9L426.1 143.4L431.0 141.9L435.9 140.4L440.9 139.0L445.8 137.6L450.7 136.2L455.6 134.8L460.5 133.5L465.4 132.2L470.3 130.9L475.3 129.6L480.2 128.3L485.1 127.1L490.0 125.8L494.9 124.6L499.8 123.4L504.7 122.3L509.6 121.1L514.6 120.0L519.5 118.9L524.4 117.8L529.3 116.8L534.2 115.7L539.1 114.7L544.0 113.7L549.0 112.7L553.9 111.8L558.8 110.8L563.7 109.9L568.6 109.1L573.5 108.2L578.4 107.3L583.3 106.5L588.3 105.7L593.2 104.9L598.1 104.1L603.0 103.4L607.9 102.7L612.8 102.0L617.7 101.3L622.6 100.6L627.6 99.9L632.5 99.3L637.4 98.7L642.3 98.1L647.2 97.6L652.1 97.0L657.0 96.5L662.0 96.0L666.9 95.5L671.8 95.1L676.7 94.6L681.6 94.2L686.5 93.8L691.4 93.4L696.3 93.1L701.3 92.8L706.2 92.5L711.1 92.2L716.0 92.0" fill="none" stroke="#5B45D6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<path d="M150.0 343.7L151.2 343.0L157.0 339.9L162.8 336.7L168.6 333.5L174.5 330.3L180.3 327.2L186.1 324.1L191.9 321.0L197.7 317.9L203.6 314.8L209.4 311.8L215.2 308.7L221.0 305.7L226.9 302.6L232.7 299.6L238.5 296.6L244.3 293.7L250.2 290.7L256.0 287.7L261.8 284.8L267.6 281.9L273.4 279.0L279.3 276.1L285.1 273.3L290.9 270.4L296.7 267.5L302.6 264.7L308.4 261.9L314.2 259.0L320.0 256.2L325.9 253.4L331.7 250.6L337.5 247.8L343.3 245.1L349.1 242.3L355.0 239.5L360.8 236.8L366.6 234.1L372.4 231.4L378.3 228.7L384.1 226.0L389.9 223.3L395.7 220.7L401.6 218.0L407.4 215.4L413.2 212.7L419.0 210.1L424.8 207.5L430.7 204.8L436.5 202.2L442.3 199.6L448.1 197.0L454.0 194.4L459.8 191.9L465.6 189.3L471.4 186.7L477.3 184.2L483.1 181.6L488.9 179.0L494.7 176.5L500.5 174.0L506.4 171.6L512.2 169.1L518.0 166.6L523.8 164.2L529.7 161.7L535.5 159.3L541.3 156.8L547.1 154.5L553.0 152.1L558.8 149.8L564.6 147.4L570.4 145.1L576.2 142.9L582.1 140.6L587.9 138.4L593.7 136.1L599.5 133.9L605.4 131.6L611.2 129.4L617.0 127.1L622.8 124.9L628.7 122.7L634.5 120.5L640.3 118.3L646.1 116.1L651.9 113.9L657.8 111.7L663.6 109.6L669.4 107.5L675.2 105.4L681.1 103.4L686.9 101.4L692.7 99.5L698.5 97.6L704.4 95.7L710.2 93.8L716.0 92.0" fill="none" stroke="#C2410C" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="5 4"/>
+<path d="M150.0 425.4L151.0 424.7L155.9 421.3L160.8 417.9L165.7 414.4L170.6 411.0L175.5 407.6L180.5 404.2L185.4 400.8L190.3 397.4L195.2 394.0L200.1 390.6L205.0 387.3L209.9 383.9L214.9 380.5L219.8 377.2L224.7 373.8L229.6 370.5L234.5 367.2L239.4 363.8L244.3 360.5L249.2 357.2L254.2 353.8L259.1 350.5L264.0 347.2L268.9 343.9L273.8 340.6L278.7 337.4L283.6 334.1L288.6 330.9L293.5 327.7L298.4 324.5L303.3 321.3L308.2 318.1L313.1 314.9L318.0 311.7L322.9 308.6L327.9 305.4L332.8 302.3L337.7 299.2L342.6 296.0L347.5 292.9L352.4 289.8L357.3 286.7L362.2 283.6L367.2 280.5L372.1 277.4L377.0 274.4L381.9 271.3L386.8 268.2L391.7 265.2L396.6 262.1L401.6 259.1L406.5 256.2L411.4 253.2L416.3 250.2L421.2 247.3L426.1 244.4L431.0 241.4L435.9 238.5L440.9 235.6L445.8 232.7L450.7 229.9L455.6 227.0L460.5 224.1L465.4 221.2L470.3 218.4L475.3 215.5L480.2 212.7L485.1 209.9L490.0 207.1L494.9 204.3L499.8 201.5L504.7 198.7L509.6 195.9L514.6 193.1L519.5 190.4L524.4 187.6L529.3 184.9L534.2 182.1L539.1 179.4L544.0 176.7L549.0 173.9L553.9 171.2L558.8 168.6L563.7 165.9L568.6 163.2L573.5 160.6L578.4 157.9L583.3 155.2L588.3 152.6L593.2 150.0L598.1 147.3L603.0 144.7L607.9 142.1L612.8 139.5L617.7 136.9L622.6 134.4L627.6 131.8L632.5 129.3L637.4 126.8L642.3 124.3L647.2 121.8L652.1 119.4L657.0 116.9L662.0 114.5L666.9 112.2L671.8 109.8L676.7 107.5L681.6 105.3L686.5 103.1L691.4 101.0L696.3 99.0L701.3 97.0L706.2 95.1L711.1 93.5L716.0 92.0" fill="none" stroke="#5B45D6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" stroke-dasharray="5 4"/>
+<circle cx="296.7" cy="164.5" r="6.5" fill="#FFFFFF"/><path d="M292.5 160.3L300.9 168.7M292.5 168.7L300.9 160.3" stroke="#C2410C" stroke-width="2.2" stroke-linecap="round"/>
+<text x="160.7" y="158.5" class="t-s">K 144: +3.3 to +3.9%</text>
+<circle cx="389.9" cy="136.7" r="5" fill="#C2410C" stroke="#FFFFFF" stroke-width="2"/>
+<text x="304.3" y="130.7" class="t-s">K 160: +1.9%</text>
+<circle cx="322.9" cy="179.2" r="6.5" fill="#FFFFFF"/><path d="M318.7 175.0L327.1 183.4M318.7 183.4L327.1 175.0" stroke="#5B45D6" stroke-width="2.2" stroke-linecap="round"/>
+<text x="332.9" y="191.2" class="t-s">K 176: +11.1%</text>
+<circle cx="401.6" cy="151.1" r="6.5" fill="#FFFFFF"/><path d="M397.4 146.9L405.8 155.3M397.4 155.3L405.8 146.9" stroke="#5B45D6" stroke-width="2.2" stroke-linecap="round"/>
+<text x="411.6" y="163.1" class="t-s">K 192: +8.0%</text>
+<circle cx="480.2" cy="128.3" r="6.5" fill="#FFFFFF"/><path d="M476.0 124.1L484.4 132.5M476.0 132.5L484.4 124.1" stroke="#5B45D6" stroke-width="2.2" stroke-linecap="round"/>
+<text x="490.2" y="140.3" class="t-s">K 208: +4.2%</text>
+<text x="142" y="226.9" class="t-s" text-anchor="end">DeepSeek, mean</text>
+<text x="142" y="263.3" class="t-s" text-anchor="end">Qwen, mean</text>
+<text x="142" y="347.2" class="t-s" text-anchor="end">DeepSeek, lowest layer</text>
+<text x="142" y="428.9" class="t-s" text-anchor="end">Qwen, lowest layer</text>
+<text x="0" y="494" class="t-s">Coverage: the share of the routed slots that the top K experts of a layer carry in the calibration traffic.</text>
+<text x="0" y="508" class="t-s">Labels: K, and the NLL change against the full model on 60 held-out turns (DeepSeek: my replay gate).</text>
+</svg>

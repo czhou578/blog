@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg viewBox="-16 -16 792 486" width="792" height="486" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>DeepSeek agent eval: time per task at reasoning effort max against high</title>
+<desc>40 tasks, one seed each. 29 of 40 ran faster at high. 10 tasks changed their result. All 40: 4.71 h at max, 3.34 h at high. C4: 943 s at max, 2,589 s at high.</desc>
+<style>.s-ink{fill:#131A2E}.s-muted{fill:#56617B}.s-surface{fill:#FFFFFF}.s-bg{fill:#F3F5FA}.s-line{fill:#D8DDEA}.s-ok{fill:#1F7A36}.s-bad{fill:#C42B2B}.s-warn{fill:#9A6200}.s-goal{fill:#6B4E16}.s-measure{fill:#0B7F86}.s-reap{fill:#C2410C}.s-bot{fill:#5B45D6}.s-topk{fill:#A86A00}.s-review{fill:#B02A6B}.s-prune{fill:#237A3B}.s-ship{fill:#1D63C4}.st-ink{stroke:#131A2E;fill:none}.st-muted{stroke:#56617B;fill:none}.st-line{stroke:#D8DDEA;fill:none}.st-ok{stroke:#1F7A36;fill:none}.st-bad{stroke:#C42B2B;fill:none}.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}.t-w{fill:#FFFFFF}</style>
+<rect x="-15.5" y="-15.5" width="791" height="485" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<line x1="92.0" y1="16.0" x2="92.0" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="416.0" x2="492.0" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="92.0" y="432.0" class="t-s" text-anchor="middle">10 s</text>
+<text x="84.0" y="420.0" class="t-s" text-anchor="end">10 s</text>
+<line x1="166.7" y1="16.0" x2="166.7" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="341.3" x2="492.0" y2="341.3" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="166.7" y="432.0" class="t-s" text-anchor="middle">30 s</text>
+<text x="84.0" y="345.3" class="t-s" text-anchor="end">30 s</text>
+<line x1="213.8" y1="16.0" x2="213.8" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="294.2" x2="492.0" y2="294.2" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="213.8" y="432.0" class="t-s" text-anchor="middle">1 min</text>
+<text x="84.0" y="298.2" class="t-s" text-anchor="end">1 min</text>
+<line x1="288.4" y1="16.0" x2="288.4" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="219.6" x2="492.0" y2="219.6" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="288.4" y="432.0" class="t-s" text-anchor="middle">3 min</text>
+<text x="84.0" y="223.6" class="t-s" text-anchor="end">3 min</text>
+<line x1="370.2" y1="16.0" x2="370.2" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="137.8" x2="492.0" y2="137.8" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="370.2" y="432.0" class="t-s" text-anchor="middle">10 min</text>
+<text x="84.0" y="141.8" class="t-s" text-anchor="end">10 min</text>
+<line x1="444.9" y1="16.0" x2="444.9" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="63.1" x2="492.0" y2="63.1" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="444.9" y="432.0" class="t-s" text-anchor="middle">30 min</text>
+<text x="84.0" y="67.1" class="t-s" text-anchor="end">30 min</text>
+<line x1="492.0" y1="16.0" x2="492.0" y2="416.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<line x1="92.0" y1="16.0" x2="492.0" y2="16.0" style="stroke: #D8DDEA" stroke-width="1"/>
+<text x="492.0" y="432.0" class="t-s" text-anchor="middle">1 h</text>
+<text x="84.0" y="20.0" class="t-s" text-anchor="end">1 h</text>
+<rect x="92.0" y="16.0" width="400.0" height="400.0" style="fill: none; stroke: #56617B" stroke-width="1"/>
+<line x1="92.0" y1="416.0" x2="492.0" y2="16.0" style="stroke: #56617B" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="482.0" y="404.0" class="t-s" text-anchor="end">faster at high</text>
+<text x="102.0" y="34.0" class="t-s" text-anchor="start">slower at high</text>
+<text x="292.0" y="456.0" class="t" text-anchor="middle">Time per run at effort max (log scale)</text>
+<text x="22" y="216.0" class="t" text-anchor="middle" transform="rotate(-90 22 216.0)">Time per run at effort high (log scale)</text>
+<circle cx="400.2" cy="277.6" r="6" style="fill: #eb6834; stroke: #FFFFFF; stroke-width: 2"><title>C2 (C code): max 933 s, hallucination; high 77 s, hallucination</title></circle>
+<circle cx="470.6" cy="44.6" r="6" style="fill: #eb6834; stroke: #FFFFFF; stroke-width: 2"><title>C6 (C code): max 2628 s, hallucination; high 2363 s, hallucination</title></circle>
+<circle cx="288.5" cy="189.0" r="6" style="fill: #eb6834; stroke: #FFFFFF; stroke-width: 2"><title>C7 (C code, trap): max 180 s, pass; high 282 s, pass</title></circle>
+<circle cx="411.1" cy="131.7" r="6" style="fill: #eb6834; stroke: #FFFFFF; stroke-width: 2"><title>C8 (C code, trap): max 1095 s, pass; high 656 s, pass</title></circle>
+<circle cx="191.3" cy="333.8" r="6" style="fill: #1baf7a; stroke: #FFFFFF; stroke-width: 2"><title>D1 (D debug): max 43 s, pass; high 34 s, pass</title></circle>
+<circle cx="219.8" cy="321.6" r="6" style="fill: #1baf7a; stroke: #FFFFFF; stroke-width: 2"><title>D3 (D debug): max 66 s, pass; high 40 s, pass</title></circle>
+<circle cx="312.4" cy="278.8" r="6" style="fill: #1baf7a; stroke: #FFFFFF; stroke-width: 2"><title>D5 (D debug): max 256 s, pass; high 75 s, pass</title></circle>
+<circle cx="415.4" cy="121.4" r="6" style="fill: #1baf7a; stroke: #FFFFFF; stroke-width: 2"><title>D8 (D debug, trap): max 1167 s, hallucination; high 764 s, hallucination</title></circle>
+<circle cx="259.7" cy="361.8" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L1 (L lookup): max 118 s, pass; high 22 s, pass</title></circle>
+<circle cx="160.7" cy="343.2" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L2 (L lookup): max 28 s, pass; high 29 s, pass</title></circle>
+<circle cx="149.8" cy="374.9" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L3 (L lookup): max 23 s, pass; high 18 s, pass</title></circle>
+<circle cx="125.2" cy="333.8" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L4 (L lookup): max 16 s, pass; high 34 s, pass</title></circle>
+<circle cx="194.1" cy="347.5" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L5 (L lookup): max 45 s, pass; high 27 s, pass</title></circle>
+<circle cx="168.2" cy="228.2" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L6 (L lookup): max 31 s, pass; high 159 s, pass</title></circle>
+<circle cx="275.5" cy="350.0" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L7 (L lookup, trap): max 149 s, hallucination; high 26 s, hallucination</title></circle>
+<circle cx="250.0" cy="278.7" r="6" style="fill: #2a78d6; stroke: #FFFFFF; stroke-width: 2"><title>L8 (L lookup, trap): max 102 s, pass; high 75 s, pass</title></circle>
+<circle cx="153.4" cy="353.2" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R1 (R read a paper): max 25 s, pass; high 25 s, pass</title></circle>
+<circle cx="190.8" cy="341.8" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R2 (R read a paper): max 43 s, pass; high 30 s, pass</title></circle>
+<circle cx="209.4" cy="347.0" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R3 (R read a paper): max 56 s, pass; high 28 s, pass</title></circle>
+<circle cx="183.1" cy="345.8" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R4 (R read a paper): max 38 s, pass; high 28 s, pass</title></circle>
+<circle cx="175.6" cy="330.7" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R5 (R read a paper): max 34 s, pass; high 35 s, pass</title></circle>
+<circle cx="250.9" cy="364.0" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R6 (R read a paper): max 104 s, pass; high 22 s, pass</title></circle>
+<circle cx="265.5" cy="239.4" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R7 (R read a paper, trap): max 128 s, pass; high 134 s, pass</title></circle>
+<circle cx="228.3" cy="316.1" r="6" style="fill: #eda100; stroke: #FFFFFF; stroke-width: 2"><title>R8 (R read a paper, trap): max 74 s, pass; high 44 s, pass</title></circle>
+<circle cx="211.2" cy="347.5" r="6" style="fill: #e87ba4; stroke: #FFFFFF; stroke-width: 2"><title>W1 (W web): max 58 s, pass; high 27 s, pass</title></circle>
+<circle cx="251.3" cy="313.5" r="6" style="fill: #e87ba4; stroke: #FFFFFF; stroke-width: 2"><title>W2 (W web): max 104 s, pass; high 45 s, pass</title></circle>
+<circle cx="194.5" cy="294.9" r="6" style="fill: #e87ba4; stroke: #FFFFFF; stroke-width: 2"><title>W4 (W web): max 45 s, pass; high 59 s, pass</title></circle>
+<circle cx="227.7" cy="315.6" r="6" style="fill: #e87ba4; stroke: #FFFFFF; stroke-width: 2"><title>W5 (W web): max 74 s, pass; high 44 s, pass</title></circle>
+<circle cx="197.0" cy="345.3" r="6" style="fill: #e87ba4; stroke: #FFFFFF; stroke-width: 2"><title>W6 (W web): max 47 s, pass; high 28 s, pass</title></circle>
+<circle cx="344.7" cy="184.9" r="6" style="fill: #e87ba4; stroke: #FFFFFF; stroke-width: 2"><title>W7 (W web, trap): max 412 s, pass; high 300 s, pass</title></circle>
+<circle cx="447.0" cy="158.4" r="5.5" style="fill: #FFFFFF; stroke: #eb6834; stroke-width: 2.5"><title>C1 (C code): max 1857 s, hallucination; high 443 s, wrong</title></circle>
+<circle cx="268.7" cy="306.2" r="5.5" style="fill: #FFFFFF; stroke: #eb6834; stroke-width: 2.5"><title>C3 (C code): max 135 s, hallucination; high 50 s, pass</title></circle>
+<circle cx="401.0" cy="38.4" r="5.5" style="fill: #FFFFFF; stroke: #eb6834; stroke-width: 2.5"><title>C4 (C code): max 943 s, wrong; high 2589 s, hallucination</title></circle>
+<circle cx="392.3" cy="73.3" r="5.5" style="fill: #FFFFFF; stroke: #eb6834; stroke-width: 2.5"><title>C5 (C code): max 830 s, wrong; high 1549 s, hallucination</title></circle>
+<circle cx="354.0" cy="313.9" r="5.5" style="fill: #FFFFFF; stroke: #1baf7a; stroke-width: 2.5"><title>D2 (D debug): max 473 s, pass; high 45 s, hallucination</title></circle>
+<circle cx="430.2" cy="150.8" r="5.5" style="fill: #FFFFFF; stroke: #1baf7a; stroke-width: 2.5"><title>D4 (D debug): max 1450 s, hallucination; high 495 s, pass</title></circle>
+<circle cx="400.8" cy="160.7" r="5.5" style="fill: #FFFFFF; stroke: #1baf7a; stroke-width: 2.5"><title>D6 (D debug): max 941 s, pass; high 428 s, wrong</title></circle>
+<circle cx="359.4" cy="217.3" r="5.5" style="fill: #FFFFFF; stroke: #1baf7a; stroke-width: 2.5"><title>D7 (D debug, trap): max 512 s, pass; high 186 s, hallucination</title></circle>
+<circle cx="243.3" cy="175.0" r="5.5" style="fill: #FFFFFF; stroke: #e87ba4; stroke-width: 2.5"><title>W3 (W web): max 93 s, pass; high 347 s, wrong</title></circle>
+<circle cx="437.6" cy="170.0" r="5.5" style="fill: #FFFFFF; stroke: #e87ba4; stroke-width: 2.5"><title>W8 (W web, trap): max 1616 s, pass; high 373 s, hallucination</title></circle>
+<text x="388.0" y="42.4" class="t" text-anchor="end">C4</text>
+<text x="458.0" y="162.4" class="t" text-anchor="start">C1</text>
+<text x="448.6" y="182.0" class="t" text-anchor="start">W8</text>
+<text x="365.0" y="317.9" class="t" text-anchor="start">D2</text>
+<text x="155.2" y="232.2" class="t" text-anchor="end">L6</text>
+<text x="540.0" y="22.0" class="t-b" text-anchor="start">Task family</text>
+<circle cx="547.0" cy="47.0" r="6" style="fill: #2a78d6"/>
+<text x="560.0" y="51.5" class="t" text-anchor="start">L lookup (8 tasks)</text>
+<circle cx="547.0" cy="69.0" r="6" style="fill: #eb6834"/>
+<text x="560.0" y="73.5" class="t" text-anchor="start">C code (8 tasks)</text>
+<circle cx="547.0" cy="91.0" r="6" style="fill: #1baf7a"/>
+<text x="560.0" y="95.5" class="t" text-anchor="start">D debug (8 tasks)</text>
+<circle cx="547.0" cy="113.0" r="6" style="fill: #eda100"/>
+<text x="560.0" y="117.5" class="t" text-anchor="start">R read a paper (8 tasks)</text>
+<circle cx="547.0" cy="135.0" r="6" style="fill: #e87ba4"/>
+<text x="560.0" y="139.5" class="t" text-anchor="start">W web (8 tasks)</text>
+<circle cx="547.0" cy="167.0" r="6" style="fill: #56617B"/>
+<text x="560.0" y="171.5" class="t" text-anchor="start">same result at both levels</text>
+<circle cx="547.0" cy="189.0" r="5.5" style="fill: #FFFFFF; stroke: #56617B; stroke-width: 2.5"/>
+<text x="560.0" y="193.5" class="t" text-anchor="start">result changed (10 tasks)</text>
+<line x1="540.0" y1="211.0" x2="554.0" y2="211.0" style="stroke: #56617B" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="560.0" y="215.5" class="t" text-anchor="start">same time at both levels</text>
+<text x="540.0" y="252.0" class="t-s" text-anchor="start">29 of 40 tasks ran faster</text>
+<text x="540.0" y="268.0" class="t-s" text-anchor="start">at high.</text>
+<text x="540.0" y="284.0" class="t-s" text-anchor="start"></text>
+<text x="540.0" y="300.0" class="t-s" text-anchor="start">All 40 tasks:</text>
+<text x="540.0" y="316.0" class="t-s" text-anchor="start">4.71 h at max, 3.34 h at high.</text>
+<text x="540.0" y="332.0" class="t-s" text-anchor="start"></text>
+<text x="540.0" y="348.0" class="t-s" text-anchor="start">C4 took 16 min at max and</text>
+<text x="540.0" y="364.0" class="t-s" text-anchor="start">43 min at high.</text>
+<text x="540.0" y="432.0" class="t-s" text-anchor="start">One seed per task, 2026-11-15.</text>
+</svg>
