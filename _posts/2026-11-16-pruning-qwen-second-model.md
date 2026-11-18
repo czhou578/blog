@@ -8,7 +8,7 @@ In my [last post]({{ site.baseurl }}{% post_url 2026-11-11-pruning-deepseek-cold
 
 DeepSeek is strong, but it decodes at about 35 tok/s on my machine. Many of my requests do not need it: a chat, a quick lookup, a coding subagent that reads files. For those, I wanted a fast model in memory at the same time, so that neither model has to stop for the other.
 
-This post is about how I fit Qwen3.6-35B-A3B into the room that was left. It took a model search, an expert prune with a quality cost that I chose to accept, a quantized draft, and a few hidden memory costs in vLLM. In its current form, Qwen decodes at about 100 tok/s beside DeepSeek. But the margin is thin, and part of it is swap.
+This post is about how I fit Qwen3.6-35B-A3B into the room that was left. It took a model search, an expert prune with a quality cost that I chose to accept, a quantized draft, and a few hidden memory costs in vLLM. In its current form, Qwen decodes at about 100 tok/s beside DeepSeek.
 
 <!-- FIGURE: the 121 GiB of the machine to scale: DeepSeek (weights, KV, runtime), Qwen (weights, KV, runtime), what is left, and the swap. -->
 
@@ -25,13 +25,13 @@ Here is the DeepSeek server after the MD prune, measured on 2026-11-13:
 | Host memory of the server processes | 3.9 |
 | **Available beside the idle server** | **about 29** |
 
-The DGX Spark has 121 GiB of memory, shared by the CPU and the GPU. A second model had to fit in about 29 GiB, with everything that it needs: the weights, the KV cache and the runtime. I also wanted a margin of at least 4 GiB, for my Claude Code sessions, the bot and the page cache.
+The DGX Spark has 121 GiB of memory, shared by the CPU and the GPU. A second model had to fit in about 29 GiB, with the weights, the KV cache and the runtime. I also wanted a margin of at least 4 GiB for my Claude Code sessions, the bot and the page cache.
 
 ## Picking the second model
 
 My first candidate was a dense model, `nvidia/Qwen3.8-27B-NVFP4`. A test window measured it alone, with DeepSeek stopped. At a 256k context, it used 34 GiB at the peak with no draft. It decoded my bot's speed test at 11.1 tok/s with no draft, and at 30.8 tok/s with its MTP draft. Both rates are slower than DeepSeek.
 
-The decode on this machine is bound by the bytes that each token reads. A dense model of 27B parameters reads all of its weights for each token. Only a MoE with few active parameters could be fast.
+The decode on this machine is bound by the bytes that each token reads. A dense model of 27B parameters reads all of its weights for each token. The fast model had to be a MoE, which reads only its few active parameters.
 
 A second window measured two of them, each at a 256k context with one sequence:
 
@@ -44,7 +44,7 @@ A second window measured two of them, each at a 256k context with one sequence:
 
 *Memory in GiB, decode in tok/s. Each rate is one run of 5 bot sessions, with prompts of 30,000 to 73,000 tokens.*
 
-On these numbers, Nemotron won: it was faster, and it needed 3.3 to 3.5 GiB less. I still chose Qwen, for its balance of reasoning and speed. <!-- TODO(CZ): say in your own words why Qwen over Nemotron. --> The price of that choice: Qwen with its draft used 32.3 GiB at 256k, 3.3 GiB more than the room that was left.
+On these numbers, Nemotron won: it was faster, and it needed 3.3 to 3.5 GiB less. I still chose Qwen: by online consensus, it has a slight edge over Nemotron in reasoning, and it was fast enough. The price of that choice: Qwen with its draft used 32.3 GiB at 256k, 3.3 GiB more than the room that was left.
 
 One number from this window surprised me. At every point, vLLM used 6.4 to 7.9 GiB beyond the weights and the KV cache. The dense 27B model had 6.7 GiB, in the same range. The overhead is a cost of the vLLM process on this machine, not of the model. I come back to it below.
 
@@ -62,7 +62,7 @@ I reused the steps of my DeepSeek prune: record the experts that my own traffic 
 - vLLM 0.33 returns the routed experts of each token with a flag, so the capture needed no server patch.
 - One expert count for all layers needed no loader patch.
 
-**The data.** The traffic of Qwen is not the traffic of my bot. It is coding, web search and tool calls. The calibration data came from three sources:
+**The data.** The traffic of Qwen is not the traffic of my bot. Qwen mainly gets coding, web search and tool calls. The calibration data came from three sources:
 
 | Source | Calibration | Held-out |
 |---|---|---|
@@ -71,8 +71,6 @@ I reused the steps of my DeepSeek prune: record the experts that my own traffic 
 | Repository files | 42 files of 7 repositories | 6 files of `nanoGPT-inference`, a repository that the calibration never sees |
 
 The transcripts can hold secrets, so a pattern replaced 18 strings, and the data stays on my machine. The capture covered 99 segments and 2.44M prompt tokens.
-
-**A fault in the capture.** Every capture request of the first window failed. The Qwen 3.5/3.6 chat template refuses a message list with no user message ("No user query found in messages."), and my capture sent the shared prefix as a system message alone. The DeepSeek template had accepted that. The fix added a short user message to the prefix.
 
 **The coverage.** For each layer, I computed the share of the routed slots that its top K experts carry:
 
@@ -86,7 +84,7 @@ The transcripts can hold secrets, so a pattern replaced 18 strings, and the data
 
 The routing of Qwen was spread much more evenly than the routing of DeepSeek, and every expert of every layer was used at least once. K 176, my first goal, kept less of the routing than the DeepSeek cut that had failed. That was the first sign that Qwen had less to give.
 
-<!-- FIGURE: coverage against K for Qwen and DeepSeek, with the pass and fail points marked. -->
+![Coverage of the routing against the share of experts kept, for Qwen and DeepSeek, with the pass and fail points of the NLL gate]({{ site.baseurl }}/images/qwen-deepseek-coverage.svg)
 
 ## The gate windows
 
@@ -122,7 +120,7 @@ The decisions, the tool names and the tool-call suite did not move. The loss was
 
 G1 held only above about K 224, and K 224 left a margin of about 1.2 GiB. No point passed both G1 and G6, so my first decision was: no prune.
 
-<!-- FIGURE: G1 NLL change against K for Qwen, with the +3% line, next to the DeepSeek curve. -->
+![NLL change against the share of experts kept, for Qwen and DeepSeek, with the +3% limit]({{ site.baseurl }}/images/qwen-deepseek-nll.svg)
 
 ## Can the vLLM overhead go?
 
