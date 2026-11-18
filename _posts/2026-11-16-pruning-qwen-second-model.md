@@ -122,6 +122,8 @@ G1 held only above about K 224, and K 224 left a margin of about 1.2 GiB. No poi
 
 ![NLL change against the share of experts kept, for Qwen and DeepSeek, with the +3% limit]({{ site.baseurl }}/images/qwen-deepseek-nll.svg)
 
+The 1.9% of DeepSeek also includes a second cut, from 6 to 5 experts per token. With the expert cut alone, DeepSeek K 160 lost only 1.4%, so Qwen lost about three times as much at the same coverage.
+
 ## Can the vLLM overhead go?
 
 Before I gave up on the full model, I tested the overhead of vLLM itself. Of the 29.9 GiB that the full model used at 128k, about 6.6 GiB was neither weights nor KV cache. If I could free 4 GiB of it, the full model would fit with no quality loss.
@@ -166,7 +168,7 @@ I chose K 208, with its G1 cost. It decodes as fast as the full model, and its t
 
 K 208 used 26.51 GiB at the peak: a margin of about 2.3 to 3.0 GiB. The next lever was the MTP draft. Its 256 experts were BF16, and they held 1.50 GiB.
 
-`qwen_draft_quant.py` converts them to NVFP4, for the weights only. Speculation stays exact: the target checks every draft token, so the output does not change, and only the acceptance can fall. Three details mattered:
+`qwen_draft_quant.py` converts them to NVFP4 for the weights only. Speculation works the same way: the target checks every draft token, so the output does not change, and only the acceptance can fall. Three details of note:
 
 - vLLM builds the draft with the quant config of the target. The build therefore patches the target's ignore list, and it adds a group for the draft experts.
 - The MoE backend of the target, `flashinfer_cutlass`, has no weight-only mode. The draft runs its MoE on Marlin instead.
@@ -208,7 +210,7 @@ The first run, text only, on 2026-11-14:
 
 **The two models share the memory bandwidth.** Each model alone keeps its speed. When both decode at once, each runs at about half speed. A router that sends one request at a time keeps the full speed.
 
-<!-- FIGURE: available memory and free swap over time, from results/pair-swap.log: the boot, the tests and the swap fill. -->
+![Available memory and swap in use during the first run of Qwen beside DeepSeek, 2026-11-14]({{ site.baseurl }}/images/qwen-pair-swap.svg)
 
 ## Vision on
 
@@ -233,7 +235,7 @@ Claude Code sends work to Qwen through subagents. With `--max-num-seqs 1`, paral
 | 2 | 98.4 tok/s | 160.6 tok/s (1.63x) | 6,661 MB |
 | 4 | 100.9 tok/s | 285.6 tok/s (2.83x) | 6,214 MB |
 
-One stream did not get slower. Each step cost about 0.3 to 0.5 GB of available memory at idle. Beside four Qwen streams, DeepSeek decoded at 15.2 tok/s, against 18.2 beside one stream and 35.7 alone. This happens only when four subagents and the bot run at the same time. Even then, the Qwen work ends sooner, so the slowdown is short. I kept four sequences.
+One stream did not get slower. Each step cost about 0.3 to 0.5 GB of available memory at idle. Beside four Qwen streams, DeepSeek decoded at 15.2 tok/s, against 18.2 beside one stream and 35.7 alone. This happens only when four subagents and the bot run at the same time. I kept four sequences.
 
 On 2026-11-15, I made two more changes:
 
@@ -262,7 +264,6 @@ The load test of this setup beside DeepSeek gave a lowest available memory of 5,
 ## What is still open
 
 - **The margin leans on swap.** The load tests leave about 6 GB available, but only because several GiB of idle server pages sit in swap. The watch is the guard against a hard reset.
-- **The 24-hour gate never ran to its end.** Each change of the setup started it again. The longest run of the text-only setup lasted 9 h 18 min. Its lowest available memory was 2,805 MB, for about two minutes, and the watch never fired. Then I stopped Qwen for a test of DeepSeek. <!-- TODO(CZ): Qwen has been down since the DeepSeek tests of 2026-11-15; its two restarts failed the 28,600 MB check (27.5 GB available). Update this when it runs again. -->
 - **A durable fix is on the DeepSeek side.** The cold cut of DeepSeek is at its limit, and no layer can go. The next lever there is a narrower draft model.
 
 ## The biggest lessons

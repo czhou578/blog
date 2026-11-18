@@ -1,0 +1,79 @@
+<svg viewBox="-16 -16 792 524" width="792" height="524" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>Available memory and swap in use during the first run of Qwen beside DeepSeek, 2026-11-14</title>
+<desc>Qwen booted beside DeepSeek from 14:25:53 to 14:28:43, and the load tests ran until 14:47:53. Available memory fell from about 28 GiB to about 9.6 GiB and stayed above 7.3 GiB in the tests. Swap in use went from 1.00 GiB at 14:20 to 7.75 GiB at 14:30, and stayed at about 7.6 GiB.</desc>
+<style>.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}</style>
+<rect x="-15.5" y="-15.5" width="791" height="523" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<text x="0" y="12" class="t-b">Memory during the first run of Qwen beside DeepSeek, 2026-11-14</text>
+<line x1="0" y1="36" x2="22" y2="36" stroke="#56617B" stroke-width="2" stroke-linecap="round"/>
+<text x="30" y="40" class="t-s">10 s values</text>
+<line x1="121.3" y1="36" x2="143.3" y2="36" stroke="#56617B" stroke-width="2" stroke-dasharray="0.1 5" stroke-linecap="round"/>
+<circle cx="132.3" cy="36" r="4" fill="#56617B" stroke="#FFFFFF" stroke-width="2"/>
+<text x="151.3" y="40" class="t-s">sysstat samples, 10 min apart (the path between them is not measured)</text>
+<text x="0" y="70" class="t">Available memory (MemAvailable), GiB</text>
+<rect x="140.5" y="82" width="21.0" height="210" fill="#F3F5FA"/>
+<rect x="163.5" y="82" width="147.8" height="210" fill="#F3F5FA"/>
+<line x1="56" y1="292.0" x2="716" y2="292.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="295.5" class="t-s" text-anchor="end">0</text>
+<line x1="56" y1="222.0" x2="716" y2="222.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="225.5" class="t-s" text-anchor="end">10</text>
+<line x1="56" y1="152.0" x2="716" y2="152.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="155.5" class="t-s" text-anchor="end">20</text>
+<line x1="56" y1="82.0" x2="716" y2="82.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="85.5" class="t-s" text-anchor="end">30</text>
+<line x1="56" y1="292" x2="716" y2="292" stroke="#56617B" stroke-width="1"/>
+<text x="0" y="322" class="t">Swap in use, GiB of 16</text>
+<rect x="140.5" y="334" width="21.0" height="100" fill="#F3F5FA"/>
+<rect x="163.5" y="334" width="147.8" height="100" fill="#F3F5FA"/>
+<line x1="56" y1="434.0" x2="716" y2="434.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="437.5" class="t-s" text-anchor="end">0</text>
+<line x1="56" y1="409.0" x2="716" y2="409.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="412.5" class="t-s" text-anchor="end">4</text>
+<line x1="56" y1="384.0" x2="716" y2="384.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="387.5" class="t-s" text-anchor="end">8</text>
+<line x1="56" y1="359.0" x2="716" y2="359.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="362.5" class="t-s" text-anchor="end">12</text>
+<line x1="56" y1="334.0" x2="716" y2="334.0" stroke="#D8DDEA" stroke-width="1"/>
+<text x="48" y="337.5" class="t-s" text-anchor="end">16</text>
+<line x1="56" y1="434" x2="716" y2="434" stroke="#56617B" stroke-width="1"/>
+<line x1="94.8" y1="434" x2="94.8" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="94.8" y="451" class="t-s" text-anchor="middle">14:20</text>
+<line x1="172.5" y1="434" x2="172.5" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="172.5" y="451" class="t-s" text-anchor="middle">14:30</text>
+<line x1="250.1" y1="434" x2="250.1" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="250.1" y="451" class="t-s" text-anchor="middle">14:40</text>
+<line x1="327.8" y1="434" x2="327.8" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="327.8" y="451" class="t-s" text-anchor="middle">14:50</text>
+<line x1="405.4" y1="434" x2="405.4" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="405.4" y="451" class="t-s" text-anchor="middle">15:00</text>
+<line x1="483.1" y1="434" x2="483.1" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="483.1" y="451" class="t-s" text-anchor="middle">15:10</text>
+<line x1="560.7" y1="434" x2="560.7" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="560.7" y="451" class="t-s" text-anchor="middle">15:20</text>
+<line x1="638.4" y1="434" x2="638.4" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="638.4" y="451" class="t-s" text-anchor="middle">15:30</text>
+<line x1="716.0" y1="434" x2="716.0" y2="438" stroke="#56617B" stroke-width="1"/>
+<text x="716.0" y="451" class="t-s" text-anchor="middle">15:40</text>
+<text x="134.5" y="187.0" class="t-s" text-anchor="end">Qwen boot</text>
+<line x1="136.5" y1="183.0" x2="142.5" y2="183.0" stroke="#56617B" stroke-width="1"/>
+<text x="236.9" y="98" class="t-s" text-anchor="middle">load tests</text>
+<line x1="56" y1="278.0" x2="716" y2="278.0" stroke="#56617B" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="712" y="272.0" class="t-s" text-anchor="end">the watch stops Qwen below 2 GiB</text>
+<path d="M96.8 95.1L136.9 95.2" fill="none" stroke="#1D63C4" stroke-width="2" stroke-dasharray="0.1 5" stroke-linecap="round"/>
+<path d="M136.9 95.2L138.2 95.2L139.5 95.4L140.8 103.0L142.1 142.8L143.4 211.6L144.6 225.4L145.9 233.9L147.2 219.2L148.5 228.8L149.8 228.3L151.1 219.8L152.4 220.6L153.7 210.8L155.0 192.0L156.3 211.6L157.6 211.4L158.9 216.7L160.2 223.2L161.5 222.9L162.8 224.6L164.1 224.6L165.4 224.7L166.6 224.5L167.9 224.6L169.2 224.6L170.5 230.5L171.8 235.8L173.1 231.4L174.4 231.4L175.7 231.4L177.0 233.2L178.3 233.3L179.6 233.1L180.9 233.1L182.2 233.1L183.5 233.5L184.8 233.6L186.1 233.5L187.4 233.5L188.6 233.6L189.9 233.6L191.2 233.7L192.5 233.7L193.8 233.7L195.1 233.7L196.4 233.8L197.7 233.8L199.0 233.8L200.3 233.8L201.6 233.9L202.9 233.8L204.2 233.8L205.5 233.8L206.8 233.8L208.1 234.0L209.4 234.1L210.6 234.6L211.9 235.0L213.2 234.9L214.5 234.8L215.8 234.8L217.1 234.9L218.4 234.9L219.7 235.0L221.0 235.0L222.3 235.0L223.6 235.1L224.9 235.4L226.2 235.5L227.5 235.5L228.8 235.4L230.1 235.4L231.4 235.4L232.6 238.7L233.9 234.6L235.2 234.7L236.5 234.9L237.8 235.0L239.1 234.9L240.4 235.0L241.7 235.0L243.0 234.9L244.3 235.4L245.6 234.9L246.9 234.9L248.2 234.7L249.5 234.7L250.8 234.7L252.1 234.8L253.4 234.8L254.6 235.4L255.9 239.4L257.2 239.9L258.5 239.9L259.8 240.0L261.1 240.0L262.4 240.3L263.7 240.3L265.0 240.2L266.3 240.2L267.6 240.3L268.9 240.5L270.2 240.6L271.5 240.6L272.8 240.3L274.1 240.1L275.4 240.1L276.6 240.0L277.9 240.0L279.2 240.0L280.5 239.9L281.8 239.9L283.1 240.0L284.4 240.0L285.7 240.0L287.0 240.0L288.3 240.0L289.6 241.0L290.9 235.5L292.2 235.6L293.5 235.5L294.8 235.7L296.1 235.7L297.4 235.7L298.6 235.7L299.9 235.7L301.2 235.8L302.5 235.9L303.8 235.8L305.1 235.5L306.4 235.5L307.7 235.6L309.0 235.5L310.3 235.5L311.6 235.4L312.9 235.2L314.2 235.2L315.5 235.2L316.8 235.2L318.1 235.2L319.4 235.2L320.6 235.3L321.9 235.3L323.2 235.3L324.5 235.4L325.8 235.4L327.1 235.5L328.4 235.5L329.7 235.6L331.0 235.6L332.3 235.5L333.6 235.5L334.9 235.5L336.2 235.5L337.5 235.5L338.8 235.5L340.1 235.6L341.4 235.7L342.6 235.7L343.9 235.7L345.2 235.6L346.5 235.5L347.8 235.6L349.1 235.6L350.4 235.6L351.7 235.6L353.0 235.6L354.3 235.5L355.6 235.5L356.9 235.5L358.2 235.5L359.5 235.5L360.8 235.6L362.1 235.5L363.4 235.5L364.6 235.6L365.9 235.5L367.2 235.5L368.5 235.5L369.8 235.5L371.1 235.4L372.4 235.4L373.7 235.3L375.0 235.5L376.3 235.7L377.6 235.6L378.9 235.7L380.2 235.7L381.5 235.8L382.8 235.7L384.1 235.6L385.4 235.5L386.6 235.8L387.9 235.8L389.2 235.8L390.5 235.8L391.8 235.9L393.1 235.9L394.4 235.8L395.7 235.8L397.0 235.8L398.3 235.6L399.6 235.6L400.9 235.6L402.2 235.6L403.5 235.6L404.8 235.6L406.1 235.7L407.4 235.6L408.6 235.6L409.9 235.7L411.2 235.7L412.5 235.7L413.8 235.7L415.1 235.7L416.4 235.7L417.7 235.7L419.0 235.7L420.3 235.7L421.6 235.7L422.9 235.7L424.2 235.7L425.5 235.8L426.8 235.8L428.1 235.8L429.4 235.9L430.6 235.8L431.9 235.8L433.2 235.9L434.5 235.9L435.8 235.8L437.1 235.9L438.4 235.8L439.7 235.7L441.0 235.7L442.3 235.8L443.6 235.7L444.9 235.6L446.2 235.6L447.5 235.6L448.8 235.7L450.1 235.6L451.4 235.6L452.6 235.6L453.9 235.6L455.2 235.6L456.5 235.6L457.8 235.6L459.1 235.5L460.4 235.4L461.7 235.4L463.0 235.4L464.3 235.4L465.6 235.5L466.9 235.5L468.2 235.5L469.5 235.5L470.8 235.5L472.1 235.5L473.4 235.5L474.6 235.5L475.9 235.5L477.2 235.6L478.5 235.5L479.8 235.6L481.1 235.5L482.4 235.5L483.7 235.4L485.0 235.6L486.3 235.5L487.6 235.6L488.9 236.2L490.2 235.7L491.5 235.9L492.8 236.0L494.1 235.9L495.4 235.9L496.6 235.9L497.9 235.9L499.2 236.0L500.5 236.0L501.8 236.0L503.1 236.0L504.4 236.0L505.7 236.0L507.0 236.0L508.3 235.9L509.6 235.9L510.9 236.0L512.2 236.2L513.5 236.7L514.8 236.4L516.1 236.4L517.4 236.6L518.6 236.3L519.9 236.3L521.2 236.3L522.5 236.5L523.8 236.7L525.1 236.6L526.4 236.7L527.7 236.5L529.0 236.5L530.3 236.6L531.6 236.8L532.9 236.7L534.2 236.8L535.5 236.7L536.8 236.6L538.1 236.5L539.4 236.5L540.6 236.5L541.9 236.5L543.2 236.5L544.5 236.5L545.8 236.5L547.1 236.5L548.4 236.2L549.7 236.2L551.0 236.2L552.3 236.3L553.6 236.6L554.9 236.5L556.2 236.5L557.5 236.7L558.8 236.6L560.1 236.5L561.4 236.6L562.6 236.6L563.9 236.6L565.2 236.8L566.5 236.7L567.8 236.8L569.1 236.8L570.4 237.0L571.7 236.9L573.0 236.8L574.3 236.9L575.6 236.6L576.9 236.6L578.2 236.6L579.5 236.6L580.8 236.6L582.1 236.7L583.4 236.7L584.6 236.7L585.9 236.8L587.2 236.8L588.5 236.9L589.8 236.9L591.1 236.7L592.4 237.5L593.7 237.8L595.0 237.7L596.3 241.9L597.6 241.9L598.9 241.7L600.2 241.6L601.5 241.6L602.8 241.9L604.1 237.4L605.4 237.3L606.6 237.1L607.9 237.2L609.2 237.1L610.5 237.0L611.8 237.0L613.1 238.1L614.4 238.1L615.7 238.1L617.0 238.1L618.3 238.3L619.6 238.0L620.9 238.0L622.2 237.9L623.5 238.0L624.8 238.1L626.1 238.1L627.4 238.2L628.6 238.3L629.9 238.3L631.2 238.5L632.5 238.3L633.8 238.0L635.1 238.0L636.4 238.1L637.7 238.1L639.0 238.1L640.3 238.4L641.6 238.4L642.9 238.3L644.2 238.4L645.5 238.2L646.8 238.1L648.1 238.1L649.4 238.5L650.6 238.3L651.9 238.1L653.2 238.6L654.5 238.4L655.8 238.3L657.1 238.2L658.4 238.2L659.7 238.3L661.0 238.1L662.3 238.1L663.6 238.4L664.9 238.3L666.2 238.3L667.5 238.3L668.8 238.2L670.1 238.2L671.4 238.1L672.6 238.1L673.9 238.2L675.2 238.2L676.5 238.1L677.8 238.2L679.1 238.2L680.4 238.3L681.7 238.2L683.0 238.3L684.3 238.2L685.6 238.1L686.9 238.2L688.2 238.2L689.5 238.4L690.8 238.4L692.1 238.2L693.4 238.2L694.6 238.2L695.9 238.2L697.2 238.0L698.5 238.3L699.8 238.3L701.1 238.5L702.4 239.0L703.7 238.9L705.0 239.1L706.3 239.4L707.6 239.0L708.9 238.3L710.2 238.3L711.5 238.1L712.8 238.1L714.1 238.1L715.4 238.0L716.6 238.0" fill="none" stroke="#1D63C4" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="96.8" cy="95.1" r="4" fill="#1D63C4" stroke="#FFFFFF" stroke-width="2"/>
+<line x1="289.6" y1="246.0" x2="289.6" y2="259.0" stroke="#56617B" stroke-width="1"/>
+<text x="295.6" y="262.0" class="t-s">lowest in the tests: 7.3 GiB</text>
+<path d="M96.8 427.7L174.5 385.6L252.3 385.4L330.0 385.7L407.6 385.8L485.3 385.8L562.9 386.2L635.1 386.4" fill="none" stroke="#B02A6B" stroke-width="2" stroke-dasharray="0.1 5" stroke-linecap="round"/>
+<path d="M635.1 386.4L636.4 386.4L637.7 386.4L639.0 386.4L640.3 386.4L641.6 386.4L642.9 386.4L644.2 386.4L645.5 386.4L646.8 386.4L648.1 386.4L649.4 386.4L650.8 386.4L652.1 386.4L653.4 386.4L654.7 386.4L656.0 386.4L657.2 386.4L658.5 386.4L659.8 386.4L661.1 386.4L662.4 386.4L663.7 386.4L665.0 386.4L666.3 386.4L667.6 386.4L668.9 386.4L670.2 386.4L671.5 386.4L672.8 386.4L674.1 386.4L675.4 386.4L676.7 386.4L678.0 386.4L679.2 386.4L680.5 386.4L681.8 386.4L683.1 386.4L684.4 386.4L685.7 386.4L687.0 386.4L688.3 386.4L689.6 386.4L690.9 386.4L692.2 386.4L693.5 386.4L694.8 386.4L696.1 386.4L697.4 386.4L698.7 386.4L700.0 386.4L701.2 386.4L702.5 386.4L703.8 386.4L705.1 386.4L706.4 386.4L707.7 386.4L709.0 386.4L710.3 386.4L711.6 386.4L712.9 386.4L714.2 386.4L715.5 386.4" fill="none" stroke="#B02A6B" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="96.8" cy="427.7" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="174.5" cy="385.6" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="252.3" cy="385.4" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="330.0" cy="385.7" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="407.6" cy="385.8" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="485.3" cy="385.8" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<circle cx="562.9" cy="386.2" r="4" fill="#B02A6B" stroke="#FFFFFF" stroke-width="2"/>
+<text x="184.5" y="355.6" class="t-s">1.00 → 7.75 GiB between 14:20 and 14:30,</text>
+<text x="184.5" y="369.6" class="t-s">with the Qwen boot in between</text>
+<text x="0" y="478" class="t-s">Available memory: the lowest value of each 10 s, from 1 s samples. Swap in use after 15:29: every 10 s.</text>
+<text x="0" y="492" class="t-s">DeepSeek ran the whole time. Its engine core started at 14:15.</text>
+</svg>
