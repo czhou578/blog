@@ -1,11 +1,9 @@
 ---
 layout: post
 title: "prune-moe-kit: One pipeline from two prunes by hand"
-date: 2026-11-25
+date: 2026-11-26
 image: https://czhou578.github.io/blog/images/prune_moe_kit_thumbnail.png
 ---
-
-<!-- TODO(CZ): set the date when you publish. -->
 
 ![prune-moe-kit: 1 pipeline, two prunes by hand made into one tool, and a 41-minute probe that agrees with the full gate on Inkling-2-Mini]({{ site.baseurl }}/images/prune_moe_kit_thumbnail.png)
 
