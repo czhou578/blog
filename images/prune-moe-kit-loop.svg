@@ -1,0 +1,87 @@
+<svg viewBox="-16 -16 792 440" width="792" height="440" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>The looped layers of Inkling-2-Mini: 24 layers in the weights, 48 rows in the capture, and one keep list for each layer</title>
+<desc>Layers 0 to 5 run one time, layers 6 to 17 run three times, and layers 18 to 23 run one time. The capture has one row for each run of a layer: 6 plus 3 times 12 plus 6 is 48 rows. The three passes use the same weights, so prune-moe-kit sums the counts of the three passes and makes one rank and one keep list for each layer. The three passes share 52% of their drop lists. At K 112, a pass loses 1.99% of its routing with the rank of the sum, and 1.55% with its own rank.</desc>
+<style>.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-m{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;font-weight:600;fill:#131A2E}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}</style>
+<rect x="-15.5" y="-15.5" width="791" height="439" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<text x="0" y="12" class="t-b">Inkling-2-Mini: 12 layers run three times, and share one keep list</text>
+<rect x="0" y="31" width="14" height="14" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<text x="22" y="42" class="t" text-anchor="start">A capture row of a layer that runs one time</text>
+<rect x="0" y="51" width="14" height="14" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<text x="22" y="62" class="t" text-anchor="start">A capture row of one pass of a looped layer</text>
+<rect x="0" y="71" width="14" height="14" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<text x="22" y="82" class="t" text-anchor="start">The keep list of a looped layer: one list for the three passes</text>
+<rect x="0" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="27" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="54" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="81" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="108" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="135" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="574" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="601" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="628" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="655" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="682" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="709" y="143" width="22" height="22" rx="4" fill="#D8DDEA" stroke="#56617B" stroke-width="1"/>
+<rect x="226" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="253" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="280" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="307" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="334" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="361" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="388" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="415" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="442" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="469" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="496" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="523" y="116" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<text x="216" y="131" class="t-s" text-anchor="end">pass 1</text>
+<rect x="226" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="253" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="280" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="307" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="334" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="361" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="388" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="415" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="442" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="469" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="496" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="523" y="143" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<text x="216" y="158" class="t-s" text-anchor="end">pass 2</text>
+<rect x="226" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="253" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="280" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="307" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="334" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="361" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="388" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="415" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="442" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="469" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="496" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<rect x="523" y="170" width="22" height="22" rx="4" fill="#5B45D6" fill-opacity="0.25" stroke="#5B45D6" stroke-width="1.5"/>
+<text x="216" y="185" class="t-s" text-anchor="end">pass 3</text>
+<text x="78.5" y="183" class="t" text-anchor="middle">layers 0 to 5</text>
+<text x="652.5" y="183" class="t" text-anchor="middle">layers 18 to 23</text>
+<text x="385.5" y="106" class="t" text-anchor="middle">layers 6 to 17: the same weights in each pass</text>
+<path d="M385.5 200 v34 m-4 -4 l4 4 l4 -4" fill="none" stroke="#56617B" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="397.5" y="221" class="t-s" text-anchor="start">the sum of the counts of the three passes</text>
+<rect x="226" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="253" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="280" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="307" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="334" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="361" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="388" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="415" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="442" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="469" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="496" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<rect x="523" y="244" width="22" height="22" rx="4" fill="#C2410C" fill-opacity="0.2" stroke="#C2410C" stroke-width="1.5"/>
+<text x="385.5" y="284" class="t" text-anchor="middle">one rank and one keep list for each layer</text>
+<line x1="0" y1="310" x2="760" y2="310" stroke="#D8DDEA" stroke-width="1"/>
+<text x="0" y="334" class="t" text-anchor="start">The capture has one row for each run of a layer: 6 + 3 × 12 + 6 = 48 rows for 24 layers.</text>
+<text x="0" y="354" class="t" text-anchor="start">The three passes share only 52% of their drop lists.</text>
+<text x="0" y="374" class="t" text-anchor="start">At K 112, a pass loses 1.99% of its routing with the rank of the sum,</text>
+<text x="0" y="394" class="t" text-anchor="start">and 1.55% with its own rank. The worst pass loses 4.43%.</text>
+</svg>

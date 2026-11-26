@@ -1,0 +1,52 @@
+<svg viewBox="-16 -16 792 374" width="792" height="374" role="img" xmlns="http://www.w3.org/2000/svg">
+<title>The band of a probe and its three verdicts, with one measured cut for each verdict</title>
+<desc>A cut passes when its whole 90% band is at or under the +3% limit: Inkling-2-Mini K 120, +0.72%, band +0.24% to +1.21%. A cut is near the limit when its band crosses the limit: Inkling-2-Mini K 112, +2.01%, band +1.14% to +3.29%. A cut fails when its whole band is over the limit: Qwen3.6-35B-A3B K 208, +8.32%, band +3.64% to +13.26%.</desc>
+<style>.t{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;fill:#131A2E}.t-s{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:10.5px;fill:#56617B}.t-m{font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, 'DejaVu Sans Mono', monospace;font-size:12px;font-weight:600;fill:#131A2E}.t-b{font-family:'Bricolage Grotesque', 'Segoe UI', system-ui, sans-serif;font-size:15px;font-weight:700;fill:#131A2E}</style>
+<rect x="-15.5" y="-15.5" width="791" height="373" rx="10" fill="#FFFFFF" stroke="#D8DDEA"/>
+<text x="0" y="12" class="t-b">The band decides the verdict of a probe</text>
+<circle cx="6" cy="38" r="5" fill="#5B45D6"/>
+<text x="18" y="42" class="t" text-anchor="start">The measured NLL change of a cut, with 20 turns</text>
+<rect x="-1" y="52" width="14" height="12" rx="4" fill="#5B45D6" fill-opacity="0.25"/>
+<text x="18" y="62" class="t" text-anchor="start">Its band: a 90% bootstrap interval over the turns</text>
+<line x1="312.0" y1="96" x2="312.0" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="312.0" y="316" class="t-s" text-anchor="middle">0%</text>
+<line x1="373.1" y1="96" x2="373.1" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="373.1" y="316" class="t-s" text-anchor="middle">+2%</text>
+<line x1="434.3" y1="96" x2="434.3" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="434.3" y="316" class="t-s" text-anchor="middle">+4%</text>
+<line x1="495.4" y1="96" x2="495.4" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="495.4" y="316" class="t-s" text-anchor="middle">+6%</text>
+<line x1="556.6" y1="96" x2="556.6" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="556.6" y="316" class="t-s" text-anchor="middle">+8%</text>
+<line x1="617.7" y1="96" x2="617.7" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="617.7" y="316" class="t-s" text-anchor="middle">+10%</text>
+<line x1="678.9" y1="96" x2="678.9" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="678.9" y="316" class="t-s" text-anchor="middle">+12%</text>
+<line x1="740.0" y1="96" x2="740.0" y2="300" stroke="#D8DDEA" stroke-width="1"/>
+<text x="740.0" y="316" class="t-s" text-anchor="middle">+14%</text>
+<line x1="312" y1="300" x2="740" y2="300" stroke="#56617B" stroke-width="1"/>
+<line x1="403.7" y1="88" x2="403.7" y2="300" stroke="#56617B" stroke-width="1.5" stroke-dasharray="5 4"/>
+<text x="409.7" y="94" class="t-s" text-anchor="start">+3% limit of the nll gate</text>
+<text x="526" y="338" class="t-s" text-anchor="middle">NLL change against the full model</text>
+<text x="0" y="122" class="t-m" text-anchor="start">pass</text>
+<text x="0" y="138" class="t" text-anchor="start">The whole band is at or under the limit</text>
+<text x="0" y="153" class="t-s" text-anchor="start">Inkling-2-Mini, K 120</text>
+<rect x="319.3" y="123" width="29.7" height="14" rx="4" fill="#5B45D6" fill-opacity="0.25"/>
+<circle cx="334.0" cy="130" r="5" fill="#5B45D6" stroke="#FFFFFF" stroke-width="2"/>
+<text x="334.0" y="116" class="t" text-anchor="middle">+0.72%</text>
+<text x="319.3" y="152" class="t-s" style="paint-order:stroke;stroke:#FFFFFF;stroke-width:4px">band +0.24% to +1.21%</text>
+<text x="0" y="192" class="t-m" text-anchor="start">near the limit</text>
+<text x="0" y="208" class="t" text-anchor="start">The band crosses the limit</text>
+<text x="0" y="223" class="t-s" text-anchor="start">Inkling-2-Mini, K 112</text>
+<rect x="346.9" y="193" width="65.7" height="14" rx="4" fill="#5B45D6" fill-opacity="0.25"/>
+<circle cx="373.4" cy="200" r="5" fill="#5B45D6" stroke="#FFFFFF" stroke-width="2"/>
+<text x="373.4" y="186" class="t" text-anchor="middle">+2.01%</text>
+<text x="346.9" y="222" class="t-s" style="paint-order:stroke;stroke:#FFFFFF;stroke-width:4px">band +1.14% to +3.29%</text>
+<text x="0" y="262" class="t-m" text-anchor="start">fail</text>
+<text x="0" y="278" class="t" text-anchor="start">The whole band is over the limit</text>
+<text x="0" y="293" class="t-s" text-anchor="start">Qwen3.6-35B-A3B, K 208</text>
+<rect x="423.3" y="263" width="294.1" height="14" rx="4" fill="#5B45D6" fill-opacity="0.25"/>
+<circle cx="566.4" cy="270" r="5" fill="#5B45D6" stroke="#FFFFFF" stroke-width="2"/>
+<text x="566.4" y="256" class="t" text-anchor="middle">+8.32%</text>
+<text x="423.3" y="292" class="t-s" style="paint-order:stroke;stroke:#FFFFFF;stroke-width:4px">band +3.64% to +13.26%</text>
+</svg>
