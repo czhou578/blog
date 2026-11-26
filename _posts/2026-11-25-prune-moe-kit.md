@@ -1,6 +1,6 @@
 ---
 layout: post
-title: "prune-kit: One pipeline from two prunes by hand"
+title: "prune-moe-kit: One pipeline from two prunes by hand"
 date: 2026-11-25
 ---
 
@@ -10,7 +10,33 @@ In my last three posts, I pruned two models by hand. DeepSeek V4 Flash 0731 went
 
 Each prune was a project of its own, but the steps were the same both times: record the experts that my work uses, rank them, remove the cold ones, and test the cut against the full model.
 
-This post is about prune-kit, the tool that I made from those steps. For testing, it had to give the results of my two prunes again. I then had it prune the newest Inkling-2-Mini model.
+This post is about prune-moe-kit, the tool that I made from those steps. For testing, it had to give the results of my two prunes again. I then had it prune the newest Inkling-2-Mini model.
+
+## The results in short
+
+- **The same bytes.** `prune-moe-kit build` made the K 208 folder of my Qwen prune again: 101,316 tensors and 18.84 GiB, equal byte for byte.
+- **The same verdict.** On Qwen, the gates gave the result of the prune by hand: K 208 and K 192 fail the NLL limit, and three other gates show no loss.
+- **A third model.** Inkling-2-Mini ran through the pipeline in four windows. K 112 frees 1.82 GiB for +1.97% NLL and passes the `nll` gate. K 104 fails at +4.24%.
+- **A short check gives the first answer.** A probe of 41 minutes estimated K 108 as the deepest cut that passes. The full gate of 103 minutes gave K 109.
+
+## Terms
+
+| Term | Meaning |
+|---|---|
+| Routed expert | An expert that the router of a layer can choose for a token. A layer has many of them, and a token uses only a few |
+| K | The number of routed experts that a cut keeps in each layer. Qwen has 256 per layer, so K 208 removes 48 |
+| Depth | How far a cut goes. A deeper cut keeps a smaller K |
+| Cold expert | An expert that my work almost never uses |
+| Cold cut | The second step of the DeepSeek prune: it removed 486 more cold experts, a different number in each layer |
+| Replay | The full model writes held-out turns of my work. Then each cut scores the same tokens |
+| NLL | The negative log-likelihood per token: the mean of −ln p over the tokens of a replay. p is the probability that the model gives to the token |
+| NLL change | `100 × (NLL of the cut / NLL of the full model − 1)`, in percent. The `nll` gate allows at most +3% |
+| Gate | A test with a limit that a cut must pass |
+| Point | One model folder that a window tests: the full model or one cut |
+| Worker | One of my two live model servers: DeepSeek and Qwen |
+| Window | A time in which a worker is down, so that a test server can use its memory |
+| Draft model | A small model for speculative decoding: it proposes tokens, and the full model checks them |
+| KV pin | The memory that a server reserves at its start for the KV cache of its context |
 
 ## What the two prunes shared
 
@@ -26,13 +52,11 @@ I started with a descriptive table. Each row is a stage of both prunes, and the 
 | 6. Gates | Replay NLL, tool names, speed, full runs, judge, blind review | The same gates, plus a facts test and an image test | Shared |
 | 7. Decision | I chose K 160, then the cold cut | I chose K 208, against the NLL gate | Mine |
 
-Only three parts were not shared: the layout of the checkpoint, the server, and the chat template. In prune-kit, these three parts are an adapter for each model, and all the other code is the same for each model.
+Only three parts were not shared: the layout of the checkpoint, the server, and the chat template. In prune-moe-kit, these three parts are an adapter for each model, and all the other code is the same for each model.
 
 The chat template comprised most of the real adapter work. In the capture window of Qwen, each request failed at first since the Qwen template refuses a message list with no user message, and the DeepSeek template accepts it.
 
-The two prunes also gave rules. I wrote them down as a checklist, `BLUEPRINT.md`. Each rule comes from a result:
-
-<!-- TODO(CZ): link `BLUEPRINT.md` here when the prune-kit repo is public. -->
+The two prunes also gave rules. I wrote them down as a checklist, [`BLUEPRINT.md`](https://github.com/czhou578/prune-moe-kit/blob/main/BLUEPRINT.md). Each rule comes from a result:
 
 - **Use the workload's own rank.** With the public rank, DeepSeek K 192 failed at +3.31%. With the rank of my bot's own traffic, K 176 cost +0.29%.
 - **Measure the reference in the same window.** One replay moves by up to 0.56% between runs.
@@ -68,25 +92,25 @@ The file holds the data sources, the memory goal, and the limits of the gates. T
 The stages are commands:
 
 ```
-0  preflight  prune-kit preflight    How much memory does each cut free, and can the pipeline run on this model?
-1  data       prune-kit data         Which recorded sessions are the workflow, and which sessions are held out?
-2  capture    prune-kit capture      Which experts does the model route the workflow to?
-3  rank       prune-kit rank         Which experts of each layer does the workflow use least?
-4  screen     by hand                Which cuts pass a short replay?
-5  prune      prune-kit build        Does the pruned folder hold the kept experts, byte for byte?
-6  gates      prune-kit gate         Does the point pass the replay, the tools, the tasks, the judge, the speed and the memory?
-7  decision   by hand                Which point do you choose?
+0  preflight  prune-moe-kit preflight    How much memory does each cut free, and can the pipeline run on this model?
+1  data       prune-moe-kit data         Which recorded sessions are the workflow, and which sessions are held out?
+2  capture    prune-moe-kit capture      Which experts does the model route the workflow to?
+3  rank       prune-moe-kit rank         Which experts of each layer does the workflow use least?
+4  screen     by hand                    Which cuts pass a short replay?
+5  prune      prune-moe-kit build        Does the pruned folder hold the kept experts, byte for byte?
+6  gates      prune-moe-kit gate         Does the point pass the replay, the tools, the tasks, the judge, the speed and the memory?
+7  decision   by hand                    Which point do you choose?
 ```
 
-By design, prune-kit does not do these things:
+By design, prune-moe-kit does not do these things:
 
-- It prunes the routed experts of a MoE model: no pruning of dense model.
+- It prunes only the routed experts of a MoE model. It does not prune a dense model.
 - It does not train or quantize.
 - It does not deploy, and does not choose the cut. It ends with a pruned folder and a report.
 
 ## Level 0: the preflight
 
-The first check reads `config.json` and the headers of the weight files. It loads no weights and runs in less than a second beside the live servers. This was its output for Inkling-2-Mini on 2026-11-24, before prune-kit had any code for that model:
+The first check reads `config.json` and the headers of the weight files. It loads no weights and runs in less than a second beside the live servers. This was its output for Inkling-2-Mini on 2026-11-24, before prune-moe-kit had any code for that model:
 
 ```
 type      inkling2_loop: MoE, stacked layout, NVFP4
@@ -102,7 +126,7 @@ K 96       3.65 GiB    19%
 
 can the pipeline run?
   routed experts  yes      128 per layer, 8 per token
-  prune tool      no       prune-kit has no prune for the stacked layout yet
+  prune tool      no       prune-moe-kit has no prune for the stacked layout yet
   capture         unknown  not proven for this model type: test the capture flag of its server
   mask            info     possible: the router has a bias
   draft model     info     dense: no expert count to keep; test its acceptance
@@ -113,7 +137,7 @@ verdict   GO WITH WORK: prune tool, capture
 
 The verdict is `GO`, `GO WITH WORK` with the parts that need work, or `NO-GO`. A dense model gets `NO-GO` and a list of the other levers.
 
-The preflight answers one question: how much memory does each cut free? It cannot answer the second question: how many experts can the model lose before its answers get worse? As the plan for the Qwen prune said: "A likely result is that 192 passes and 160 fails." In the test, K 208 failed the NLL limit of +3%, and K 208 keeps 16 more experts per layer than K 192.
+The preflight answers one question: how much memory does each cut free? It cannot answer the second question: how many experts can the model lose before its answers get worse? The plan for the Qwen prune made a guess: "A likely result is that 192 passes and 160 fails." The guess was wrong. In the test, K 208 failed the NLL limit of +3%, and K 208 keeps 16 more experts per layer than K 192.
 
 The files also do not hold the other levers. The server of Inkling pins 20 GiB of KV cache for a context of 262,144 tokens. A smaller context can free more memory than the deepest cut of this table.
 
@@ -123,9 +147,9 @@ My two prunes gave me results that I trust, and three checks compared the tool w
 
 **Check A: the numbers.** From the file headers alone, the preflight had to give the recorded sizes. For Qwen, K 208 frees 3.16 GiB (my record rounds it to 3.17). For DeepSeek, K 160 frees 21.27 GiB in 28,896 tensors, and the cold cut frees 4.29 GiB more.
 
-**Check B: the bytes.** `prune-kit build` made K 208 from the full Qwen, with the rank file of the prune by hand. I then had a script compare the result with the folder of my live server. The five weight files and the index were equal, byte for byte: 101,316 tensors, 18.84 GiB. Only `config.json` differed, in the quantization keys that I had changed later for the 4-bit draft.
+**Check B: the bytes.** `prune-moe-kit build` made K 208 from the full Qwen, with the rank file of the prune by hand. I then had a script compare the result with the folder of my live server. The five weight files and the index were equal, byte for byte: 101,316 tensors, 18.84 GiB. Only `config.json` differed, in the quantization keys that I had changed later for the 4-bit draft.
 
-**Check C: the scorer.** The new replay scorer had to send the same requests as the old one. All 121 requests were equal. Then I had both scorers ran on the live Qwen, on the 60 recorded turns of my Qwen prune:
+**Check C: the scorer.** The new replay scorer had to send the same requests as the old one. All 121 requests were equal. Then I had both scorers run on the live Qwen, on the 60 recorded turns of my Qwen prune:
 
 | Run | NLL per token |
 |---|---|
@@ -147,9 +171,9 @@ The second check loads the model once in one window and does the following:
 5. Boot each cut, and score the same 20 turns.
 6. Stop the test server, and restore the workers.
 
-A full gate uses the whole capture and 60 turns. The probe uses a small part of the tokens and a third of the turns, so its result has more noise. The report shows that noise as a band: the range that holds 90% of the results of new samples of the same turns. A cut is `pass` or `fail` only when its whole band is on one side of the limit. Each other cut is `near the limit`.
+A full gate uses the whole capture and 60 turns. The probe uses a small part of the tokens and a third of the turns, so its result has more noise. The report shows that noise as a band: a 90% bootstrap interval. The probe draws a new sample of the turns 1,000 times, with replacement. Each draw keeps the two scores of a turn together: the score of the full model and the score of the cut. The band is the range from the 5% point to the 95% point of the NLL change over these draws. A cut is `pass` or `fail` only when its whole band is on one side of the limit. Each other cut is `near the limit`.
 
-The report also puts a line through the measured cuts. The line gives an estimate of the deepest K that holds the gate. The estimate itself is not a gate result.
+The report also fits a line to the measured cuts, by least squares: the NLL change against the share of the routing that a cut removes. The line goes through zero, because the full model has no cut and no cost. The line gives an estimate of the deepest K that holds the gate. The estimate itself is not a gate result.
 
 ## The first real windows
 
@@ -194,6 +218,8 @@ A third window (14:48 to 16:05) ran each gate on the full Qwen, on K 208 and on 
 | `judge` (30 blind pairs, DeepSeek) | Reference | Better 10, worse 9, equal 11 (p = 1.00): no loss | Better 12, worse 10, equal 8 (p = 0.83): no loss | |
 | `speed` (no limit) | 110.2 tok/s | 104.4 tok/s | 113.2 tok/s | |
 | `memory` (goal 26.5 GiB) | 30.9 GiB | 28.0 GiB: fail | 26.4 GiB: pass | |
+
+The bands of the `nll` gate are the bootstrap intervals of the probe, here with 30 turns. The p values of the `judge` gate come from a two-sided sign test on the pairs that are not equal.
 
 The result of my Qwen post holds: both cuts fail the `nll` gate, and the gates `tools`, `tasks` and `judge` show no loss. That is the case in which I chose K 208, and the report has a name for it:
 
@@ -242,7 +268,7 @@ Three windows failed. The runner restored both workers at the first try after ea
 
 Window 4 ran the probe and the full gate on the same three cuts:
 
-![The probe against the full gate on Inkling-2-Mini: the NLL change of three cuts, with the 90% band of each value and the +3% limit]({{ site.baseurl }}/images/prune-kit-probe-full-gate.svg)
+![The probe against the full gate on Inkling-2-Mini: the NLL change of three cuts, with the 90% band of each value and the +3% limit]({{ site.baseurl }}/images/prune-moe-kit-probe-full-gate.svg)
 
 | Cut | Freed | Probe: 450,383 tokens, 20 turns | Band (90%) of the probe | Full gate: 3,974,504 tokens, 60 turns | Gates of the full gate |
 |---|---|---|---|---|---|
@@ -262,10 +288,10 @@ After window 4, the preflight of Inkling gives `GO`: its lines `prune tool` and 
 
 ## What is still open
 
-- **prune-kit does not build a DeepSeek prune.** The preflight reads the EXL3 checkpoint of DeepSeek, but `prune-kit build` works on safetensors checkpoints only. The DeepSeek tools stay in their own repo.
+- **prune-moe-kit does not build a DeepSeek prune.** The preflight reads the EXL3 checkpoint of DeepSeek, but `prune-moe-kit build` works on safetensors checkpoints only. The DeepSeek tools stay in their own repo.
 - **The last repairs did not run in a real window.** After the windows, I changed the runner so that Ctrl-C also restores the workers. I also gave the probe an option that adds the full gate to the same window. The report gives the Inkling numbers again from the files, but no real window ran with these changes.
 - **Two stages are still by hand:** the screen and the decision.
-- **The estimate of the depth comes from three models.** Each model that runs through prune-kit adds a data point.
+- **The estimate of the depth comes from three models.** Each model that runs through prune-moe-kit adds a data point.
 - **The test was not cheap.** The windows of 2026-11-25 stopped my two workers for about five and a half hours in total.
 - **A general tool costs more than one prune by hand.** If I prune only one more model, the checklist and the preflight give most of the value. The rest pays off only from the model after that.
 
@@ -280,7 +306,7 @@ After window 4, the preflight of Inkling gives `GO`: its lines `prune tool` and 
 
 Thanks for reading! If you have any questions or suggestions, feel free to reach out.
 
-<!-- TODO(CZ): the prune-kit repo is private today, and its plan calls the project name a placeholder. Add the link when the repo is public. -->
+The code of prune-moe-kit is in this repo: [czhou578/prune-moe-kit](https://github.com/czhou578/prune-moe-kit).
 
 The code of the two prunes by hand is in this repo: [czhou578/spark-moe-specialize](https://github.com/czhou578/spark-moe-specialize#files).
 
