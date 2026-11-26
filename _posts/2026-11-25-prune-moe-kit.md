@@ -105,6 +105,8 @@ The stages are commands:
 7  decision   by hand                    Which point do you choose?
 ```
 
+![The pipeline of prune-moe-kit: eight stages, what each stage writes, and the adapter parts of a model]({{ site.baseurl }}/images/prune-moe-kit-pipeline.svg)
+
 By design, prune-moe-kit does not do these things:
 
 - It prunes only the routed experts of a MoE model. It does not prune a dense model.
@@ -176,6 +178,8 @@ The second check loads the model once in one window and does the following:
 
 A full gate uses the whole capture and 60 turns. The probe uses a small part of the tokens and a third of the turns, so its result has more noise. The report shows that noise as a band: a 90% bootstrap interval. The probe draws a new sample of the turns 1,000 times, with replacement. Each draw keeps the two scores of a turn together: the score of the full model and the score of the cut. The band is the range from the 5% point to the 95% point of the NLL change over these draws. A cut is `pass` or `fail` only when its whole band is on one side of the limit. Each other cut is `near the limit`.
 
+![The band of a probe and its three verdicts, with one measured cut for each verdict]({{ site.baseurl }}/images/prune-moe-kit-band-verdicts.svg)
+
 The report also fits a line to the measured cuts, by least squares: the NLL change against the share of the routing that a cut removes. The line goes through zero, because the full model has no cut and no cost. The line gives an estimate of the deepest K that holds the gate. The estimate itself is not a gate result.
 
 ## The first real windows
@@ -204,6 +208,8 @@ The tests of the runner had passed, but they were dry runs: they started no serv
 - **A server that stops still answers.** A vLLM server ignores SIGTERM while it loads its weights, and the stop itself needs time. The health check of the next cut got its answer from the old server, and the result of K 224 was lost. The runner now stops the whole process group, and it waits until the health URL is silent.
 - **The page cache blocked the restore.** The start of Qwen failed with a CUDA out-of-memory error. The page cache of the new cut folders held 25 GiB. On a machine with unified memory, a server start needs that memory free. The runner now asks the kernel to drop the cached pages of its folders before each boot and before the restore.
 - **`sh` is not bash.** The stop command of Qwen was not valid in `sh`. For this reason, the first try of window 1 failed safely, before DeepSeek stopped.
+
+![The probe against the prune by hand on Qwen3.6-35B-A3B: the NLL change of three cuts, with the 90% band of each probe value and the +3% limit]({{ site.baseurl }}/images/prune-moe-kit-qwen-probe.svg)
 
 The numbers of the probe were higher than the numbers of my full gate by hand, which gave +4.15% at K 208 and +8.04% at K 192. But both recorded values are inside the bands of the probe, and the verdict is the same: K 208 and K 192 fail.
 
@@ -282,6 +288,8 @@ Window 4 ran the probe and the full gate on the same three cuts:
 **The probe gave the same answer as the full gate.** Each value of the full gate is inside the band of the probe. The probe estimated K 108 as the deepest cut that holds the `nll` gate, and the line of the full gate gave K 109. The probe needed 41 minutes, and the full gate needed 103 minutes.
 
 **The passes of a looped layer use different experts.** A looped layer runs three times with the same weights, so one keep list must serve each pass. The three passes shared only 52% of their drop lists. I ranked the experts by the sum of the passes, and this cost each pass little. At K 112, a pass lost 1.99% of its routing with the rank of the sum, and 1.55% with its own rank. The worst pass lost 4.43%.
+
+![The looped layers of Inkling-2-Mini: 24 layers in the weights, 48 rows in the capture, and one keep list for each layer]({{ site.baseurl }}/images/prune-moe-kit-loop.svg)
 
 **The depth was a surprise again.** A token uses 6.25% of a layer of Inkling (8 of 128), and 3.1% of a layer of Qwen (8 of 256). My open question was whether this share predicts the depth. The +3% limit is at about 15% of the experts for Inkling, and at about 12% to 15% for Qwen. For these two models, the answer is no.
 
