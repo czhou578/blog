@@ -2,9 +2,12 @@
 layout: post
 title: "prune-moe-kit: One pipeline from two prunes by hand"
 date: 2026-11-25
+image: https://czhou578.github.io/blog/images/prune_moe_kit_thumbnail.png
 ---
 
-<!-- TODO(CZ): first draft. Set the date when you publish, and add a thumbnail (the `image:` key and the first figure), as in the last three posts. -->
+<!-- TODO(CZ): set the date when you publish. -->
+
+![prune-moe-kit: 1 pipeline, two prunes by hand made into one tool, and a 41-minute probe that agrees with the full gate on Inkling-2-Mini]({{ site.baseurl }}/images/prune_moe_kit_thumbnail.png)
 
 In my last three posts, I pruned two models by hand. DeepSeek V4 Flash 0731 went from 95.39 GiB of loaded weights to 69.79 GiB, in [two]({{ site.baseurl }}{% post_url 2026-11-07-pruning-deepseek %}) [steps]({{ site.baseurl }}{% post_url 2026-11-11-pruning-deepseek-cold-experts %}). Then [Qwen3.6-35B-A3B]({{ site.baseurl }}{% post_url 2026-11-16-pruning-qwen-second-model %}) went from 21.22 GiB to 17.01 GiB. Both models now run at the same time on one DGX Spark.
 
