@@ -55,7 +55,7 @@ I started with a descriptive table. Each row is a stage of both prunes, and the 
 
 Only three parts were not shared: the layout of the checkpoint, the server, and the chat template. In prune-moe-kit, these three parts are an adapter for each model, and all the other code is the same for each model.
 
-The chat template comprised most of the real adapter work. In the capture window of Qwen, each request failed at first since the Qwen template refuses a message list with no user message, and the DeepSeek template accepts it.
+The chat template was most of the real adapter work. In the capture window of Qwen, each request failed at first since the Qwen template refuses a message list with no user message, and the DeepSeek template accepts it.
 
 The two prunes also gave rules. I wrote them down as a checklist, [`BLUEPRINT.md`](https://github.com/czhou578/prune-moe-kit/blob/main/BLUEPRINT.md). Each rule comes from a result:
 
@@ -161,7 +161,7 @@ My two prunes gave me results that I trust, and three checks compared the tool w
 | The new scorer, run 1 | 0.3303 |
 | The new scorer, run 2 | 0.3283 |
 
-My first limit for this check was 0.2%. Two runs of the same scorer differed by 0.62%. The limit was below the noise, so I changed the check: the new scorer must agree with the old one inside the noise of two runs.
+My first limit for this check was 0.2%. Two runs of the same scorer differed by about 0.6%. The limit was below the noise, so I changed the check: the new scorer must agree with the old one inside the noise of two runs.
 
 ## Level 1: the probe
 
