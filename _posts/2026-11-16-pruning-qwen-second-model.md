@@ -1,8 +1,11 @@
 ---
 layout: post
 title: "Pruning Qwen3.6-35B-A3B: Fitting a second model beside DeepSeek"
-date: 2026-11-16
+date: 2026-11-25
+image: https://czhou578.github.io/blog/images/pruning_qwen_thumbnail.png
 ---
+
+![Pruning Qwen3.6-35B-A3B: about 100 tok/s, a fast second model in memory beside DeepSeek on one DGX Spark]({{ site.baseurl }}/images/pruning_qwen_thumbnail.png)
 
 In my [last post]({{ site.baseurl }}{% post_url 2026-11-11-pruning-deepseek-cold-experts %}), I cut DeepSeek V4 Flash 0731 down to 69.79 GiB of weights, under the 72 GiB cap that I had set for it. The cap had one purpose: to leave room for a second model on the same DGX Spark.
 
@@ -10,7 +13,6 @@ DeepSeek is strong, but it decodes at about 35 tok/s on my machine. Many of my r
 
 This post is about how I fit Qwen3.6-35B-A3B into the room that was left. It took a model search, an expert prune with a quality cost that I chose to accept, a quantized draft, and a few hidden memory costs in vLLM. In its current form, Qwen decodes at about 100 tok/s beside DeepSeek.
 
-<!-- FIGURE: the 121 GiB of the machine to scale: DeepSeek (weights, KV, runtime), Qwen (weights, KV, runtime), what is left, and the swap. -->
 
 ## The budget
 
